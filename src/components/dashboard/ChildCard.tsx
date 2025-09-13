@@ -27,7 +27,9 @@ const ChildCard: React.FC<ChildCardProps> = ({ child }) => {
     : 0;
 
   const handleStartLearning = () => {
+    console.log('Starting learning for child:', child.name);
     selectChild(child);
+    console.log('Setting view to tutor');
     setView('tutor');
   };
 
