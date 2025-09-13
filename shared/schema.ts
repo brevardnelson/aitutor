@@ -270,7 +270,7 @@ export const userRoles = pgTable('user_roles', {
   userId: integer('user_id').references(() => users.id).notNull(),
   role: varchar('role').notNull(), // 'system_admin', 'school_admin', 'teacher', 'parent', 'student'
   schoolId: integer('school_id').references(() => schools.id), // null for system admins only
-  permissions: json('permissions').$type<string[]>().default([]), // Optional overrides
+  permissions: text('permissions').array().default([]), // PostgreSQL text array for permissions
   isActive: boolean('is_active').default(true),
   assignedAt: timestamp('assigned_at').defaultNow(),
 }, (table) => ({

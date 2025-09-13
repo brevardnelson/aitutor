@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { dashboardAPI } from './api';
+import authRoutes from './auth-routes';
+import { authenticateToken } from './auth-middleware';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,15 +11,22 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Dashboard API routes
-app.get('/api/dashboard/:childId/:subject', async (req, res) => {
+// Authentication routes
+app.use('/api/auth', authRoutes);
+
+// Dashboard API routes (now with authentication)
+app.get('/api/dashboard/:childId/:subject', authenticateToken, async (req, res) => {
   try {
     const { childId, subject } = req.params;
     
-    // TODO: Add authentication and authorization here
-    // - Verify user is authenticated  
-    // - Check parent owns this child
-    // - Validate input parameters
+    // Authentication and authorization now handled by middleware
+    // req.user contains the authenticated user information
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // TODO: Add parent-child relationship check
+    // For now, allow access if authenticated
     
     const summary = await dashboardAPI.generateDashboardSummary(childId, subject);
     res.json(summary);
@@ -30,15 +39,17 @@ app.get('/api/dashboard/:childId/:subject', async (req, res) => {
   }
 });
 
-// Learning session tracking routes
-app.post('/api/sessions/start', async (req, res) => {
+// Learning session tracking routes (now with authentication)
+app.post('/api/sessions/start', authenticateToken, async (req, res) => {
   try {
     const { studentId, subject, topic, sessionType } = req.body;
     
-    // TODO: Add authentication and authorization
-    // - Verify user is authenticated
-    // - Check parent owns this student
-    // - Validate input data
+    // Authentication now handled by middleware
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // TODO: Add student ownership validation
     
     const sessionId = await dashboardAPI.startLearningSession(
       studentId, 
@@ -57,14 +68,17 @@ app.post('/api/sessions/start', async (req, res) => {
   }
 });
 
-app.post('/api/sessions/:sessionId/end', async (req, res) => {
+app.post('/api/sessions/:sessionId/end', authenticateToken, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { duration, problemsAttempted, problemsCompleted, correctAnswers, hintsUsed } = req.body;
     
-    // TODO: Add authentication and authorization
-    // - Verify user is authenticated
-    // - Check session belongs to user's child
+    // Authentication now handled by middleware
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // TODO: Add session ownership validation
     
     await dashboardAPI.endLearningSession(
       parseInt(sessionId),
@@ -85,14 +99,17 @@ app.post('/api/sessions/:sessionId/end', async (req, res) => {
   }
 });
 
-app.post('/api/sessions/:sessionId/problem-attempt', async (req, res) => {
+app.post('/api/sessions/:sessionId/problem-attempt', authenticateToken, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { studentId, subject, topic, problemData } = req.body;
     
-    // TODO: Add authentication and authorization
-    // - Verify user is authenticated
-    // - Check session belongs to user's child
+    // Authentication now handled by middleware
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // TODO: Add session ownership validation
     
     await dashboardAPI.recordProblemAttempt(
       parseInt(sessionId),
@@ -112,14 +129,17 @@ app.post('/api/sessions/:sessionId/problem-attempt', async (req, res) => {
   }
 });
 
-app.post('/api/sessions/:sessionId/abandon', async (req, res) => {
+app.post('/api/sessions/:sessionId/abandon', authenticateToken, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { reason } = req.body;
     
-    // TODO: Add authentication and authorization
-    // - Verify user is authenticated
-    // - Check session belongs to user's child
+    // Authentication now handled by middleware
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // TODO: Add session ownership validation
     
     // For now, just end the session with 0 duration to mark as abandoned
     await dashboardAPI.endLearningSession(
