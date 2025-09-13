@@ -2,9 +2,11 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { BookOpen, Calculator, Globe, TestTube, FileText, Brain, Lock, Cpu } from 'lucide-react';
+import { BookOpen, Calculator, Globe, TestTube, FileText, Brain, Lock, Cpu, Settings, GraduationCap } from 'lucide-react';
 import { User } from '@/lib/auth';
 import { aiService, type Subject } from '@/lib/ai-service';
+import { useRBAC } from '@/contexts/RBACContext';
+import { RoleGuard } from '@/components/auth/RoleGuard';
 
 interface SubjectInfo {
   id: Subject;
@@ -21,6 +23,7 @@ interface SubjectSelectorProps {
 }
 
 const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect }) => {
+  const { hasRole } = useRBAC();
   const subjects: SubjectInfo[] = [
     {
       id: 'math',
@@ -93,6 +96,31 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
             <Badge variant="outline" className="text-sm">
               {user.role.charAt(0).toUpperCase() + user.role.slice(1)} Account
             </Badge>
+          </div>
+        </div>
+
+        {/* Dashboard Access for Admin and Teacher Roles */}
+        <div className="flex justify-center mb-8">
+          <div className="flex gap-4">
+            <RoleGuard roles={['system_admin', 'school_admin']} fallback={null}>
+              <Button 
+                onClick={() => window.location.href = '/admin'}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+              >
+                <Settings className="h-4 w-4" />
+                Admin Dashboard
+              </Button>
+            </RoleGuard>
+            
+            <RoleGuard roles={['teacher']} fallback={null}>
+              <Button 
+                onClick={() => window.location.href = '/teacher'}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+              >
+                <GraduationCap className="h-4 w-4" />
+                Teacher Dashboard
+              </Button>
+            </RoleGuard>
           </div>
         </div>
 
