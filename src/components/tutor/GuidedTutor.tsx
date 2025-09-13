@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { StepValidator, StepValidationResult } from '@/lib/stepValidator';
 import { guidedTutorContent, TopicKey, getRandomQuestion } from './GuidedTutorContent';
 import { aiService, type Subject, type TutoringRequest } from '@/lib/ai-service';
+import { learningTracker, LearningTracker } from '@/services/learning-tracker';
 
 interface Message {
   id: string;
@@ -45,6 +46,15 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   const [isComplete, setIsComplete] = useState(false);
   const [hintsShown, setHintsShown] = useState<number[]>([]);
   const [isValidating, setIsValidating] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [attempts, setAttempts] = useState(0);
+  
+  // Session-wide aggregate counters for proper endSession tracking
+  const [problemsAttempted, setProblemsAttempted] = useState(0);
+  const [problemsCompleted, setProblemsCompleted] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [totalHintsUsed, setTotalHintsUsed] = useState(0);
 
   // Get model info for this subject
   const modelInfo = aiService.getModelInfo(subject);
@@ -62,7 +72,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     return await aiService.generateTutoringResponse(request);
   };
 
-  // Initialize with AI welcome message
+  // Initialize with AI welcome message and start learning session
   React.useEffect(() => {
     const initializeChat = async () => {
       try {
@@ -85,11 +95,75 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
         }]);
       }
     };
+
+    const startSession = async () => {
+      if (topic && !sessionStarted) {
+        try {
+          const sessionData = {
+            studentId: LearningTracker.getCurrentStudentId(),
+            subject: subject,
+            topic: topic,
+            sessionType: 'practice' as 'practice'
+          };
+          
+          await learningTracker.startSession(sessionData);
+          setSessionStarted(true);
+          learningTracker.startProblemTimer();
+          console.log(`Started guided tutoring session for topic: ${topic}`);
+        } catch (error) {
+          console.error('Failed to start guided session:', error);
+        }
+      }
+    };
     
     initializeChat();
-  }, [topic, subject]);
+    startSession();
+  }, [topic, subject, sessionStarted]);
 
-  const getNewQuestion = () => {
+  // Helper function to end session properly with aggregates
+  const endSessionWithMetrics = async (reason: string = 'Session completed') => {
+    if (!learningTracker.isSessionActive()) {
+      console.log('No active session to end');
+      return;
+    }
+
+    try {
+      // REQUIREMENT 2: End session with proper aggregate metrics
+      await learningTracker.endSession({
+        problemsAttempted,
+        problemsCompleted, 
+        correctAnswers,
+        hintsUsed: totalHintsUsed
+      });
+      
+      console.log(`GuidedTutor session ended: ${reason}`, {
+        problemsAttempted,
+        problemsCompleted,
+        correctAnswers,
+        hintsUsed: totalHintsUsed
+      });
+    } catch (error) {
+      console.error('Error ending GuidedTutor session:', error);
+      // Fallback to abandon if endSession fails
+      try {
+        await learningTracker.abandonSession(reason);
+      } catch (abandonError) {
+        console.error('Error abandoning session as fallback:', abandonError);
+      }
+    }
+  };
+
+  // Cleanup effect to handle unmounting with proper session closure
+  React.useEffect(() => {
+    return () => {
+      // REQUIREMENT 2: Use endSession with aggregates instead of abandonSession
+      if (learningTracker.isSessionActive()) {
+        endSessionWithMetrics('GuidedTutor component unmounted').catch(console.error);
+      }
+    };
+  }, [problemsAttempted, problemsCompleted, correctAnswers, totalHintsUsed]);
+
+  const getNewQuestion = async () => {
     if (!topic) return;
     
     const topicKey = topic as TopicKey;
@@ -109,10 +183,34 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     setUserInput('');
     setHintsShown([]);
     setIsValidating(false);
+    setAttempts(0); // Reset attempts for new question
+    setHintsUsed(0); // Reset hints for new question
+    // Note: Don't reset aggregate counters - they track session-wide metrics
+    
+    // Fix #3: Ensure session continuity for new questions
+    if (!learningTracker.isSessionActive()) {
+      try {
+        const sessionData = {
+          studentId: LearningTracker.getCurrentStudentId(),
+          subject: subject,
+          topic: topic,
+          sessionType: 'practice' as 'practice'
+        };
+        
+        await learningTracker.startSession(sessionData);
+        setSessionStarted(true);
+        console.log(`Started new guided tutoring session for new question: ${topic}`);
+      } catch (error) {
+        console.error('Failed to start new session for new question:', error);
+      }
+    }
+    
+    // Restart timer for new problem
+    learningTracker.startProblemTimer();
   };
 
   React.useEffect(() => {
-    getNewQuestion();
+    getNewQuestion().catch(console.error);
   }, [topic]);
 
   const checkAnswer = (userAnswer: string): boolean => {
@@ -158,7 +256,10 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     setMessages(prev => [...prev, userMessage]);
     setUserInput('');
     
+    // Handle hint requests - don't count as problem attempts
     if (userInput.toLowerCase().trim() === 'hint') {
+      setHintsUsed(prev => prev + 1);
+      setTotalHintsUsed(prev => prev + 1);
       const hintMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -169,7 +270,42 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       return;
     }
     
+    // REQUIREMENT 1: Log EVERY submission - increment attempts and problemsAttempted
+    setAttempts(prev => prev + 1);
+    setProblemsAttempted(prev => prev + 1);
+    
+    // Check if this is the final correct answer
     if (checkAnswer(userInput)) {
+      // REQUIREMENT 3: Update aggregate counters
+      setCorrectAnswers(prev => prev + 1);
+      setProblemsCompleted(prev => prev + 1);
+      
+      // REQUIREMENT 1: Log the successful final answer completion
+      if (sessionStarted) {
+        try {
+          await learningTracker.recordProblemAttempt(
+            LearningTracker.getCurrentStudentId(),
+            subject,
+            topic,
+            {
+              problemId: `${topic}-final-${Date.now()}`,
+              difficulty: LearningTracker.determineDifficulty(topic, currentQuestion.problem || ''),
+              attempts: attempts + 1,
+              hintsUsed: hintsUsed,
+              timeSpent: learningTracker.getProblemTimeSpent(),
+              isCorrect: true,
+              isCompleted: true, // This is the final answer
+              needsAIIntervention: hintsUsed > 0,
+              skippedToFinalHint: hintsUsed > 2
+            }
+          );
+
+          console.log(`Problem completed successfully. Attempts: ${attempts + 1}, Hints: ${hintsUsed}`);
+        } catch (error) {
+          console.error('Failed to record final answer completion:', error);
+        }
+      }
+
       const finalMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -182,6 +318,30 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       return;
     }
     
+    // REQUIREMENT 1: Log incorrect final answer attempts
+    if (sessionStarted) {
+      try {
+        await learningTracker.recordProblemAttempt(
+          LearningTracker.getCurrentStudentId(),
+          subject,
+          topic,
+          {
+            problemId: `${topic}-final-attempt-${Date.now()}`,
+            difficulty: LearningTracker.determineDifficulty(topic, currentQuestion.problem || ''),
+            attempts: attempts,
+            hintsUsed: hintsUsed,
+            timeSpent: learningTracker.getProblemTimeSpent(),
+            isCorrect: false,
+            isCompleted: false, // Incorrect final answer attempt
+            needsAIIntervention: true, // Incorrect answer needs intervention
+            skippedToFinalHint: hintsUsed > 2
+          }
+        );
+      } catch (error) {
+        console.error('Failed to record incorrect final answer attempt:', error);
+      }
+    }
+    
     setIsValidating(true);
     
     try {
@@ -191,6 +351,32 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
         `Step ${currentStep + 1}`,
         topic || 'math'
       );
+      
+      // REQUIREMENT 1: Record ALL step-level attempts (both correct and incorrect)
+      if (sessionStarted) {
+        try {
+          await learningTracker.recordProblemAttempt(
+            LearningTracker.getCurrentStudentId(),
+            subject,
+            topic,
+            {
+              problemId: `${topic}-step-${currentStep + 1}-${Date.now()}`,
+              difficulty: LearningTracker.determineDifficulty(topic, currentQuestion.problem || ''),
+              attempts: attempts,
+              hintsUsed: hintsUsed,
+              timeSpent: learningTracker.getProblemTimeSpent(),
+              isCorrect: validation.isCorrect,
+              isCompleted: false, // Step-level validation, not final completion
+              needsAIIntervention: hintsUsed > 0 || !validation.isCorrect,
+              skippedToFinalHint: hintsUsed > 2
+            }
+          );
+          
+          console.log(`Step ${currentStep + 1} validation: ${validation.isCorrect ? 'correct' : 'incorrect'}`);
+        } catch (error) {
+          console.error('Failed to record step-level attempt:', error);
+        }
+      }
       
       let response = validation.feedback || "Good thinking! Let's continue.";
       
@@ -217,6 +403,32 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
+      console.error('StepValidator error:', error);
+      
+      // REQUIREMENT 1: Still log failed validation attempts
+      if (sessionStarted) {
+        try {
+          await learningTracker.recordProblemAttempt(
+            LearningTracker.getCurrentStudentId(),
+            subject,
+            topic,
+            {
+              problemId: `${topic}-validation-error-${Date.now()}`,
+              difficulty: LearningTracker.determineDifficulty(topic, currentQuestion.problem || ''),
+              attempts: attempts,
+              hintsUsed: hintsUsed,
+              timeSpent: learningTracker.getProblemTimeSpent(),
+              isCorrect: false,
+              isCompleted: false,
+              needsAIIntervention: true, // Validation error requires intervention
+              skippedToFinalHint: hintsUsed > 2
+            }
+          );
+        } catch (recordError) {
+          console.error('Failed to record validation error attempt:', recordError);
+        }
+      }
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -242,7 +454,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       <CardContent className="p-4">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">{topic || 'Math'} Practice</h3>
-          <Button onClick={getNewQuestion} variant="outline" size="sm">
+          <Button onClick={() => getNewQuestion().catch(console.error)} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />New Question
           </Button>
         </div>
@@ -283,6 +495,8 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
         <div className="space-y-2">
           <Button 
             onClick={() => {
+              setHintsUsed(prev => prev + 1);
+              setTotalHintsUsed(prev => prev + 1);
               const hint: Message = {
                 id: Date.now().toString(),
                 type: 'ai',

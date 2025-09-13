@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import DrillQuestion from './DrillQuestion';
 import { drillContent, DrillTopicKey, getRandomDrillQuestion } from './DrillContent';
 import { CheckCircle, XCircle, RotateCcw, Trophy } from 'lucide-react';
+import { learningTracker, LearningTracker } from '@/services/learning-tracker';
 
 interface TopicDrillsProps {
   topic: string;
@@ -27,12 +28,46 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
   const [results, setResults] = useState<DrillResult[]>([]);
   const [isComplete, setIsComplete] = useState(false);
   const [score, setScore] = useState(0);
+  const [sessionStarted, setSessionStarted] = useState(false);
 
   const totalQuestions = 5;
 
+  // Start learning session when component mounts
   useEffect(() => {
+    const startSession = async () => {
+      if (topic && !sessionStarted) {
+        try {
+          const sessionData = {
+            studentId: LearningTracker.getCurrentStudentId(),
+            subject: 'math',
+            topic: topic,
+            sessionType: 'practice' as 'practice'
+          };
+          
+          await learningTracker.startSession(sessionData);
+          setSessionStarted(true);
+          // Start timer for first question
+          learningTracker.startProblemTimer();
+          console.log(`Started drill session for topic: ${topic}`);
+        } catch (error) {
+          console.error('Failed to start drill session:', error);
+        }
+      }
+    };
+
     loadNewQuestion();
-  }, [topic]);
+    startSession();
+  }, [topic, sessionStarted]);
+
+  // Cleanup effect to handle unmounting
+  useEffect(() => {
+    return () => {
+      // Abandon session on component unmount
+      if (learningTracker.isSessionActive()) {
+        learningTracker.abandonSession('TopicDrills component unmounted').catch(console.error);
+      }
+    };
+  }, []);
 
   const loadNewQuestion = () => {
     const topicKey = topic as DrillTopicKey;
@@ -49,7 +84,7 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
     setSelectedAnswer(answer);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedAnswer || !currentQuestion) return;
 
     const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
@@ -60,6 +95,33 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
       isCorrect
     };
 
+    // Record problem attempt
+    if (sessionStarted) {
+      try {
+        // Get time spent BEFORE starting next timer
+        const timeSpent = learningTracker.getProblemTimeSpent();
+        
+        await learningTracker.recordProblemAttempt(
+          LearningTracker.getCurrentStudentId(),
+          'math',
+          topic,
+          {
+            problemId: currentQuestion.id || `drill-${topic}-${questionIndex}`,
+            difficulty: LearningTracker.determineDifficulty(topic, currentQuestion.question),
+            attempts: 1, // Drills allow one attempt per question
+            hintsUsed: 0, // No hints in drills
+            timeSpent,
+            isCorrect,
+            isCompleted: true,
+            needsAIIntervention: false,
+            skippedToFinalHint: false
+          }
+        );
+      } catch (error) {
+        console.error('Failed to record drill attempt:', error);
+      }
+    }
+
     setResults(prev => [...prev, result]);
     setShowFeedback(true);
 
@@ -68,11 +130,26 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (questionIndex + 1 >= totalQuestions) {
       setIsComplete(true);
+      
+      // End learning session when drill is complete
+      if (sessionStarted) {
+        try {
+          await learningTracker.endSession({
+            problemsAttempted: totalQuestions,
+            problemsCompleted: totalQuestions,
+            correctAnswers: score,
+            hintsUsed: 0 // No hints in drills
+          });
+        } catch (error) {
+          console.error('Failed to end drill session:', error);
+        }
+      }
     } else {
       setQuestionIndex(prev => prev + 1);
+      learningTracker.startProblemTimer(); // Start timer for next question
       loadNewQuestion();
     }
   };

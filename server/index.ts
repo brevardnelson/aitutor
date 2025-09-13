@@ -112,6 +112,36 @@ app.post('/api/sessions/:sessionId/problem-attempt', async (req, res) => {
   }
 });
 
+app.post('/api/sessions/:sessionId/abandon', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { reason } = req.body;
+    
+    // TODO: Add authentication and authorization
+    // - Verify user is authenticated
+    // - Check session belongs to user's child
+    
+    // For now, just end the session with 0 duration to mark as abandoned
+    await dashboardAPI.endLearningSession(
+      parseInt(sessionId),
+      0, // 0 duration indicates abandoned session
+      0, // No problems attempted
+      0, // No problems completed
+      0, // No correct answers
+      0  // No hints used
+    );
+    
+    console.log(`Session ${sessionId} abandoned: ${reason}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Abandon session error:', error);
+    res.status(500).json({ 
+      error: 'Failed to abandon session',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });

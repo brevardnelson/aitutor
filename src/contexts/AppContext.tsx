@@ -113,6 +113,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setCurrentUser(null);
     setCurrentChild(null);
+    // Clear persisted current child
+    localStorage.removeItem('caribbean_ai_current_child');
   };
 
   const enrollChildInSubject = (childId: string, subject: string) => {
@@ -143,6 +145,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const selectChild = (child: Child) => {
     setCurrentChild(child);
+    // Persist current child for learning tracker access
+    saveToStorage('caribbean_ai_current_child', child);
   };
 
 

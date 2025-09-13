@@ -7,6 +7,7 @@ import { ArrowRight } from 'lucide-react';
 import MultipleChoiceQuestion from './MultipleChoiceQuestion';
 import { problemBank } from './PracticeTestProblems';
 import { extendedProblemBank } from './PracticeTestProblemsExtended';
+import { learningTracker, LearningTracker } from '@/services/learning-tracker';
 
 interface PracticeTestProps {
   type: 'full' | 'drill';
@@ -39,10 +40,45 @@ const PracticeTest: React.FC<PracticeTestProps> = ({ type, topics, problemCount,
   const [startTime] = useState(Date.now());
   const [isComplete, setIsComplete] = useState(false);
   const [results, setResults] = useState<TestResults | null>(null);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [hintsUsed, setHintsUsed] = useState(0);
 
+  // Start learning session when component mounts
   useEffect(() => {
+    const startSession = async () => {
+      if (topics.length > 0 && !sessionStarted) {
+        try {
+          const sessionData = {
+            studentId: LearningTracker.getCurrentStudentId(),
+            subject: 'math',
+            topic: topics.join(', '), // Combined topics for practice test
+            sessionType: type === 'full' ? 'test' : 'practice' as 'practice' | 'test'
+          };
+          
+          await learningTracker.startSession(sessionData);
+          setSessionStarted(true);
+          // Start timer for first problem
+          learningTracker.startProblemTimer();
+          console.log(`Started ${type} session for topics: ${topics.join(', ')}`);
+        } catch (error) {
+          console.error('Failed to start learning session:', error);
+        }
+      }
+    };
+
     generateProblems();
-  }, [topics, problemCount]);
+    startSession();
+  }, [topics, problemCount, type, sessionStarted]);
+
+  // Cleanup effect to handle unmounting
+  useEffect(() => {
+    return () => {
+      // Abandon session on component unmount
+      if (learningTracker.isSessionActive()) {
+        learningTracker.abandonSession('PracticeTest component unmounted').catch(console.error);
+      }
+    };
+  }, []);
 
   const generateWrongAnswers = (correct: string, topic: string): string[] => {
     const wrongAnswers: string[] = [];
@@ -103,14 +139,45 @@ const PracticeTest: React.FC<PracticeTestProps> = ({ type, topics, problemCount,
     setUserAnswers(new Array(finalProblems.length).fill(''));
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const newAnswers = [...userAnswers];
     newAnswers[currentIndex] = currentAnswer;
     setUserAnswers(newAnswers);
+
+    // Record problem attempt
+    if (sessionStarted && problems[currentIndex]) {
+      try {
+        const problem = problems[currentIndex];
+        const isCorrect = currentAnswer === problem.correctAnswer;
+        // Get time spent BEFORE starting next timer
+        const timeSpent = learningTracker.getProblemTimeSpent();
+        
+        await learningTracker.recordProblemAttempt(
+          LearningTracker.getCurrentStudentId(),
+          'math',
+          problem.topic,
+          {
+            problemId: problem.id,
+            difficulty: LearningTracker.determineDifficulty(problem.topic, problem.question),
+            attempts: 1, // Practice test allows one attempt per question
+            hintsUsed: 0, // No hints in practice tests
+            timeSpent,
+            isCorrect,
+            isCompleted: true,
+            needsAIIntervention: false,
+            skippedToFinalHint: false
+          }
+        );
+      } catch (error) {
+        console.error('Failed to record problem attempt:', error);
+      }
+    }
+
     setCurrentAnswer('');
 
     if (currentIndex < problems.length - 1) {
       setCurrentIndex(currentIndex + 1);
+      learningTracker.startProblemTimer();
     } else {
       finishTest(newAnswers);
     }
@@ -143,6 +210,16 @@ const PracticeTest: React.FC<PracticeTestProps> = ({ type, topics, problemCount,
 
     setResults(testResults);
     setIsComplete(true);
+
+    // End learning session
+    if (sessionStarted) {
+      learningTracker.endSession({
+        problemsAttempted: problems.length,
+        problemsCompleted: problems.length, // All problems completed in practice test
+        correctAnswers: correct,
+        hintsUsed: hintsUsed
+      }).catch(console.error);
+    }
   };
 
   const formatTime = (seconds: number) => {
