@@ -17,9 +17,10 @@ interface Child {
 interface ChildCardProps {
   child: Child;
   onStartLearning?: () => void;
+  onViewAnalytics?: (childId: string, childName: string) => void;
 }
 
-const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning }) => {
+const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning, onViewAnalytics }) => {
   const { selectChild, selectedSubject, getSubjectProgress } = useAppContext();
   
   // Get progress for current subject only
@@ -35,6 +36,12 @@ const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning }) => {
     console.log('Starting learning session');
     if (onStartLearning) {
       onStartLearning();
+    }
+  };
+
+  const handleViewAnalytics = () => {
+    if (onViewAnalytics) {
+      onViewAnalytics(child.id, child.name);
     }
   };
 
@@ -102,7 +109,13 @@ const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning }) => {
             <Play className="h-4 w-4" />
             Start Learning
           </Button>
-          <Button variant="outline" size="sm" className="px-3">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="px-3"
+            onClick={handleViewAnalytics}
+            title="View Analytics"
+          >
             <BarChart3 className="h-4 w-4" />
           </Button>
         </div>

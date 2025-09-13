@@ -7,6 +7,7 @@ import { Plus, User, BookOpen, TrendingUp, LogOut } from 'lucide-react';
 import AddChildForm from './AddChildForm';
 import ChildCard from './ChildCard';
 import UnenrolledChildCard from './UnenrolledChildCard';
+import DetailedDashboard from './DetailedDashboard';
 
 interface DashboardProps {
   onStartLearning: () => void;
@@ -16,13 +17,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
   const { user } = useAuth();
   const { children, selectedSubject, getEnrolledChildren, getUnenrolledChildren } = useAppContext();
   const [showAddChild, setShowAddChild] = React.useState(false);
+  const [showDetailedDashboard, setShowDetailedDashboard] = React.useState(false);
+  const [selectedChildForAnalytics, setSelectedChildForAnalytics] = React.useState<{id: string, name: string} | null>(null);
   
   // Get subject-specific children
   const currentSubject = selectedSubject || 'math';
   const enrolledChildren = getEnrolledChildren(currentSubject);
   const unenrolledChildren = getUnenrolledChildren(currentSubject);
 
+  const handleViewAnalytics = (childId: string, childName: string) => {
+    setSelectedChildForAnalytics({ id: childId, name: childName });
+    setShowDetailedDashboard(true);
+  };
+
+  const handleBackFromAnalytics = () => {
+    setShowDetailedDashboard(false);
+    setSelectedChildForAnalytics(null);
+  };
+
   if (!user) return null;
+
+  // Show detailed dashboard if selected
+  if (showDetailedDashboard && selectedChildForAnalytics) {
+    return (
+      <DetailedDashboard
+        childId={selectedChildForAnalytics.id}
+        childName={selectedChildForAnalytics.name}
+        subject={currentSubject}
+        onBack={handleBackFromAnalytics}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -141,7 +166,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {enrolledChildren.map(child => (
-                      <ChildCard key={child.id} child={child} onStartLearning={onStartLearning} />
+                      <ChildCard 
+                        key={child.id} 
+                        child={child} 
+                        onStartLearning={onStartLearning}
+                        onViewAnalytics={handleViewAnalytics}
+                      />
                     ))}
                   </div>
                 </div>

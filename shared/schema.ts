@@ -1,10 +1,10 @@
-import { pgTable, varchar, integer, timestamp, decimal, boolean, text, json } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { pgTable, serial, varchar, integer, timestamp, decimal, boolean, text, json } from 'drizzle-orm/pg-core';
 
-// Users table (extends the localStorage auth system)
+// Use existing users table structure
 export const users = pgTable('users', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
+  id: serial('id').primaryKey(),
   email: varchar('email').notNull().unique(),
+  passwordHash: varchar('password_hash').notNull(),
   fullName: varchar('full_name').notNull(),
   phone: varchar('phone'),
   role: varchar('role').notNull(),
@@ -13,30 +13,32 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Children profiles
-export const children = pgTable('children', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  parentId: varchar('parent_id').references(() => users.id),
-  name: varchar('name').notNull(),
-  age: integer('age').notNull(),
-  grade: varchar('grade').notNull(),
-  targetExam: varchar('target_exam').notNull(),
+// Use existing students table structure (maps to our children concept)
+export const students = pgTable('students', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id), // For backward compatibility
+  parentId: integer('parent_id').references(() => users.id), 
+  gradeLevel: varchar('grade_level'),
+  subjects: json('subjects').$type<string[]>(),
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Subject enrollments
-export const subjectEnrollments = pgTable('subject_enrollments', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+// Use existing progress table structure and extend it
+export const progress = pgTable('progress', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   subject: varchar('subject').notNull(),
-  enrolledAt: timestamp('enrolled_at').defaultNow(),
+  topic: varchar('topic').notNull(),
+  completed: integer('completed').default(0),
+  total: integer('total').default(0),
+  lastAccessed: timestamp('last_accessed').defaultNow(),
+  performanceScore: decimal('performance_score').default('0.00'),
 });
 
-// Learning sessions
+// New tables for comprehensive metrics - using integer IDs to match existing pattern
 export const learningSessions = pgTable('learning_sessions', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   subject: varchar('subject').notNull(),
   topic: varchar('topic').notNull(),
   startTime: timestamp('start_time').notNull(),
@@ -54,9 +56,9 @@ export const learningSessions = pgTable('learning_sessions', {
 
 // Individual problem attempts
 export const problemAttempts = pgTable('problem_attempts', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  sessionId: varchar('session_id').references(() => learningSessions.id),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  sessionId: integer('session_id').references(() => learningSessions.id),
+  studentId: integer('student_id').references(() => students.id),
   subject: varchar('subject').notNull(),
   topic: varchar('topic').notNull(),
   problemId: varchar('problem_id').notNull(),
@@ -73,8 +75,8 @@ export const problemAttempts = pgTable('problem_attempts', {
 
 // Topic mastery tracking
 export const topicMastery = pgTable('topic_mastery', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   subject: varchar('subject').notNull(),
   topic: varchar('topic').notNull(),
   totalProblems: integer('total_problems').default(0),
@@ -91,8 +93,8 @@ export const topicMastery = pgTable('topic_mastery', {
 
 // Daily activity summary
 export const dailyActivity = pgTable('daily_activity', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   date: varchar('date').notNull(), // YYYY-MM-DD format
   totalTime: integer('total_time').default(0), // minutes
   sessionsCount: integer('sessions_count').default(0),
@@ -105,8 +107,8 @@ export const dailyActivity = pgTable('daily_activity', {
 
 // Weekly engagement summary
 export const weeklyEngagement = pgTable('weekly_engagement', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   weekStart: varchar('week_start').notNull(), // YYYY-MM-DD format
   daysActive: integer('days_active').default(0),
   totalTime: integer('total_time').default(0),
@@ -118,8 +120,8 @@ export const weeklyEngagement = pgTable('weekly_engagement', {
 
 // Parent-defined goals
 export const parentGoals = pgTable('parent_goals', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   subject: varchar('subject').notNull(),
   title: varchar('title').notNull(),
   description: text('description'),
@@ -134,8 +136,8 @@ export const parentGoals = pgTable('parent_goals', {
 
 // Exam readiness tracking
 export const examReadiness = pgTable('exam_readiness', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   subject: varchar('subject').notNull(),
   examType: varchar('exam_type').notNull(),
   overallScore: decimal('overall_score').default('0'), // 0-100
@@ -149,8 +151,8 @@ export const examReadiness = pgTable('exam_readiness', {
 
 // Alerts for parents
 export const alerts = pgTable('alerts', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   type: varchar('type').notNull(), // 'struggle', 'engagement', 'readiness', 'goal', 'milestone'
   severity: varchar('severity').notNull(), // 'low', 'medium', 'high'
   title: varchar('title').notNull(),
@@ -163,12 +165,24 @@ export const alerts = pgTable('alerts', {
 
 // Milestones and achievements
 export const milestones = pgTable('milestones', {
-  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
-  childId: varchar('child_id').references(() => children.id),
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id),
   type: varchar('type').notNull(), // 'topic_mastery', 'accuracy_streak', 'time_goal', 'consistency'
   title: varchar('title').notNull(),
   description: text('description'),
   badgeIcon: varchar('badge_icon').notNull(),
   points: integer('points').default(0),
   achievedAt: timestamp('achieved_at').defaultNow(),
+});
+
+// Student profiles extension (add missing fields to existing students table concept)
+export const studentProfiles = pgTable('student_profiles', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).unique(),
+  name: varchar('name').notNull(),
+  age: integer('age').notNull(),
+  grade: varchar('grade').notNull(),
+  targetExam: varchar('target_exam').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });

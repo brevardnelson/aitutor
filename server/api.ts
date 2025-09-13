@@ -1,82 +1,65 @@
-import type { 
-  DashboardSummary,
-  EngagementMetrics,
-  ProgressMetrics,
-  PerformanceMetrics,
-  AIInteractionMetrics,
-  LearningSession,
-  TopicMastery,
-  DailyActivity,
-  Alert,
-  Milestone,
-  ParentGoal,
-  ExamReadiness
-} from '../types/dashboard-metrics';
+// Server-side API endpoints for dashboard data
+// This is where all database operations should happen securely
 
-// Remove dangerous direct database import - will use API calls instead
+import { DashboardStorage } from './storage';
+import type { DashboardSummary } from '../src/types/dashboard-metrics';
 
-export class DashboardService {
-  private baseUrl = '/api'; // Server API endpoints
+// Create a single instance of storage service
+const storage = new DashboardStorage();
 
+export class DashboardAPI {
+  
+  // Calculate dashboard metrics server-side
   async generateDashboardSummary(childId: string, subject: string): Promise<DashboardSummary> {
+    // Convert childId to number for database queries
+    const studentId = parseInt(childId);
+    
     try {
-      // Call server API endpoint for dashboard data
-      const response = await fetch(`${this.baseUrl}/dashboard/${childId}/${subject}`);
-      
-      if (!response.ok) {
-        throw new Error(`Dashboard API error: ${response.status}`);
-      }
-      
-      const dashboardData = await response.json();
-      return dashboardData;
+      // Fetch all required data in parallel
+      const [
+        learningHistory,
+        topicMastery,
+        dailyActivity,
+        activeAlerts,
+        recentMilestones,
+        parentGoals,
+        examReadiness
+      ] = await Promise.all([
+        storage.getChildLearningHistory(studentId, subject, 30),
+        storage.getTopicMasteryData(studentId, subject),
+        storage.getDailyActivityData(studentId, 30),
+        storage.getActiveAlerts(studentId),
+        storage.getRecentMilestones(studentId, 5),
+        storage.getParentGoals(studentId, subject),
+        storage.getExamReadiness(studentId, subject)
+      ]);
+
+      // Calculate metrics (server-side calculations)
+      const engagement = this.calculateEngagementMetrics(learningHistory, dailyActivity);
+      const progress = this.calculateProgressMetrics(topicMastery, recentMilestones);
+      const performance = this.calculatePerformanceMetrics(learningHistory, topicMastery);
+      const aiInteraction = this.calculateAIInteractionMetrics(learningHistory);
+
+      return {
+        childId,
+        subject,
+        engagement,
+        progress,
+        performance,
+        aiInteraction,
+        examReadiness: examReadiness || this.generateDefaultExamReadiness(childId, subject),
+        activeAlerts,
+        recentGoals: parentGoals.slice(0, 3),
+        generatedAt: new Date()
+      };
     } catch (error) {
-      console.error('Failed to fetch dashboard data from API:', error);
-      // For now, return sample data as fallback until API is implemented
-      return this.generateSampleData(childId, subject);
+      console.error('Server-side dashboard generation error:', error);
+      throw new Error('Failed to generate dashboard data');
     }
   }
 
-  // Temporary method to generate dashboard from API data (will be moved to server)
-  private async generateDashboardFromData(childId: string, subject: string, data: {
-    learningHistory: any[];
-    topicMastery: any[];
-    dailyActivity: any[];
-    activeAlerts: any[];
-    recentMilestones: any[];
-    parentGoals: any[];
-    examReadiness: any;
-  }): Promise<DashboardSummary> {
-    const {
-      learningHistory,
-      topicMastery,
-      dailyActivity,
-      activeAlerts,
-      recentMilestones,
-      parentGoals,
-      examReadiness
-    } = data;
-
-    // Calculate metrics
-    const engagement = this.calculateEngagementMetrics(learningHistory, dailyActivity);
-    const progress = this.calculateProgressMetrics(topicMastery, recentMilestones);
-    const performance = this.calculatePerformanceMetrics(learningHistory, topicMastery);
-    const aiInteraction = this.calculateAIInteractionMetrics(learningHistory);
-
-    return {
-      childId,
-      subject,
-      engagement,
-      progress,
-      performance,
-      aiInteraction,
-      examReadiness: examReadiness || this.generateDefaultExamReadiness(childId, subject),
-      activeAlerts,
-      recentGoals: parentGoals.slice(0, 3),
-      generatedAt: new Date()
-    };
-  }
-
-  private calculateEngagementMetrics(sessions: LearningSession[], dailyActivity: DailyActivity[]): EngagementMetrics {
+  // Server-side metric calculations (moved from frontend)
+  private calculateEngagementMetrics(sessions: any[], dailyActivity: any[]) {
     // Calculate total learning time this week
     const thisWeek = this.getThisWeekDates();
     const thisWeekActivity = dailyActivity.filter(d => thisWeek.includes(d.date));
@@ -115,7 +98,7 @@ export class DashboardService {
     };
   }
 
-  private calculateProgressMetrics(topicMastery: TopicMastery[], milestones: Milestone[]): ProgressMetrics {
+  private calculateProgressMetrics(topicMastery: any[], milestones: any[]) {
     // Topics covered
     const topicsCovered = topicMastery.map(tm => tm.topic);
 
@@ -142,7 +125,7 @@ export class DashboardService {
     };
   }
 
-  private calculatePerformanceMetrics(sessions: LearningSession[], topicMastery: TopicMastery[]): PerformanceMetrics {
+  private calculatePerformanceMetrics(sessions: any[], topicMastery: any[]) {
     // Overall accuracy rate (without hints)
     const totalCorrect = sessions.reduce((sum, s) => sum + s.correctAnswers, 0);
     const totalAttempted = sessions.reduce((sum, s) => sum + s.problemsAttempted, 0);
@@ -171,7 +154,7 @@ export class DashboardService {
     };
   }
 
-  private calculateAIInteractionMetrics(sessions: LearningSession[]): AIInteractionMetrics {
+  private calculateAIInteractionMetrics(sessions: any[]) {
     if (sessions.length === 0) {
       return {
         hintsPerSession: 0,
@@ -202,7 +185,7 @@ export class DashboardService {
     };
   }
 
-  private generateDefaultExamReadiness(childId: string, subject: string): ExamReadiness {
+  private generateDefaultExamReadiness(childId: string, subject: string) {
     return {
       childId,
       subject,
@@ -219,7 +202,7 @@ export class DashboardService {
 
   // Helper methods
   private getThisWeekDates(): string[] {
-    const dates = [];
+    const dates: string[] = [];
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay()); // Start from Sunday
@@ -233,7 +216,7 @@ export class DashboardService {
     return dates;
   }
 
-  private calculateEngagementStreak(dailyActivity: DailyActivity[]): number {
+  private calculateEngagementStreak(dailyActivity: any[]): number {
     // Sort by date descending
     const sortedActivity = dailyActivity
       .sort((a, b) => b.date.localeCompare(a.date))
@@ -260,7 +243,7 @@ export class DashboardService {
     return streak;
   }
 
-  private calculateImprovementTrend(sessions: LearningSession[]): number {
+  private calculateImprovementTrend(sessions: any[]): number {
     if (sessions.length < 2) return 0;
 
     // Split sessions into two periods
@@ -274,7 +257,7 @@ export class DashboardService {
     return olderAccuracy > 0 ? ((recentAccuracy - olderAccuracy) / olderAccuracy) * 100 : 0;
   }
 
-  private calculateAverageAccuracy(sessions: LearningSession[]): number {
+  private calculateAverageAccuracy(sessions: any[]): number {
     if (sessions.length === 0) return 0;
     
     const totalCorrect = sessions.reduce((sum, s) => sum + s.correctAnswers, 0);
@@ -283,7 +266,7 @@ export class DashboardService {
     return totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
   }
 
-  private calculateDifficultyProgression(sessions: LearningSession[]): { easy: number; medium: number; hard: number } {
+  private calculateDifficultyProgression(sessions: any[]): { easy: number; medium: number; hard: number } {
     const progression = { easy: 0, medium: 0, hard: 0 };
     
     sessions.forEach(session => {
@@ -298,106 +281,57 @@ export class DashboardService {
     return 20; // Placeholder
   }
 
-  // Generate sample data for development
-  generateSampleData(childId: string, subject: string): DashboardSummary {
-    return {
-      childId,
+  // Learning session tracking methods (for instrumentation)
+  async startLearningSession(studentId: number, subject: string, topic: string, sessionType: 'practice' | 'test' | 'review'): Promise<number> {
+    return await storage.createLearningSession({
+      studentId,
       subject,
-      engagement: {
-        totalLearningTime: 180, // 3 hours this week
-        averageSessionDuration: 25,
-        sessionsCompleted: 8,
-        daysActive: 4,
-        currentStreak: 3,
-        timePerTopic: {
-          'Fractions': 60,
-          'Algebra Basics': 45,
-          'Word Problems': 75
-        }
-      },
-      progress: {
-        topicsCovered: ['Fractions', 'Decimals', 'Percentages', 'Algebra Basics'],
-        curriculumProgress: 35,
-        problemsAttempted: 120,
-        completionRate: 85,
-        recentAchievements: [
-          {
-            id: '1',
-            childId,
-            type: 'topic_mastery',
-            title: 'Fractions Master',
-            description: 'Achieved 90% accuracy in fractions',
-            achievedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-            badgeIcon: '🏆',
-            points: 100
-          }
-        ]
-      },
-      performance: {
-        accuracyRate: 78,
-        improvementTrend: 15, // 15% improvement
-        weakestAreas: ['Word Problems', 'Mixed Numbers'],
-        strongestAreas: ['Basic Addition', 'Fractions'],
-        difficultyProgression: {
-          easy: 45,
-          medium: 20,
-          hard: 5
-        }
-      },
-      aiInteraction: {
-        hintsPerSession: 3.2,
-        avgAttemptsBeforeCorrect: 2.1,
-        aiInterventionRate: 25,
-        stepByStepEngagement: 75
-      },
-      examReadiness: {
-        childId,
-        subject,
-        examType: 'common-entrance',
-        overallScore: 65,
-        topicScores: {
-          'Fractions': 85,
-          'Decimals': 70,
-          'Percentages': 60,
-          'Algebra': 45
-        },
-        weakAreas: ['Word Problems', 'Complex Algebra'],
-        strongAreas: ['Basic Arithmetic', 'Fractions'],
-        recommendedStudyTime: 4,
-        estimatedReadinessDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-        lastUpdated: new Date()
-      },
-      activeAlerts: [
-        {
-          id: '1',
-          childId,
-          type: 'struggle',
-          severity: 'medium',
-          title: 'Struggling with Word Problems',
-          message: 'Your child has attempted 15 word problems but only completed 6. Consider reviewing problem-solving strategies.',
-          actionRequired: true,
-          isRead: false,
-          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000)
-        }
-      ],
-      recentGoals: [
-        {
-          id: '1',
-          childId,
-          subject,
-          title: 'Master Fractions by Month End',
-          description: 'Achieve 85% accuracy in fraction problems',
-          targetDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-          targetMetric: 'accuracy',
-          targetValue: 85,
-          currentValue: 78,
-          isCompleted: false,
-          createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
-        }
-      ],
-      generatedAt: new Date()
-    };
+      topic,
+      startTime: new Date(),
+      duration: 0,
+      problemsAttempted: 0,
+      problemsCompleted: 0,
+      correctAnswers: 0,
+      hintsUsed: 0,
+      avgAttemptsPerProblem: 0,
+      difficulty: 'easy',
+      sessionType
+    });
+  }
+
+  async endLearningSession(sessionId: number, duration: number, problemsAttempted: number, problemsCompleted: number, correctAnswers: number, hintsUsed: number) {
+    const avgAttempts = problemsAttempted > 0 ? problemsAttempted / problemsCompleted : 0;
+    await storage.updateLearningSession(sessionId, {
+      endTime: new Date(),
+      duration,
+      problemsAttempted,
+      problemsCompleted,
+      correctAnswers,
+      hintsUsed,
+      avgAttemptsPerProblem: avgAttempts
+    });
+  }
+
+  async recordProblemAttempt(sessionId: number, studentId: number, subject: string, topic: string, problemData: {
+    problemId: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    attempts: number;
+    hintsUsed: number;
+    timeSpent: number;
+    isCorrect: boolean;
+    isCompleted: boolean;
+    needsAIIntervention: boolean;
+    skippedToFinalHint: boolean;
+  }) {
+    await storage.recordProblemAttempt({
+      sessionId,
+      studentId,
+      subject,
+      topic,
+      ...problemData
+    });
   }
 }
 
-export const dashboardService = new DashboardService();
+// Export singleton instance
+export const dashboardAPI = new DashboardAPI();

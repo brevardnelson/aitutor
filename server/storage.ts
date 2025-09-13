@@ -1,355 +1,607 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from '../shared/schema.js';
-import type { 
-  LearningSession, 
-  ProblemAttempt, 
-  TopicMastery, 
-  DailyActivity,
-  WeeklyEngagement,
-  ParentGoal,
-  ExamReadiness,
-  Alert,
-  Milestone,
-  DashboardSummary
-} from '../src/types/dashboard-metrics.js';
+import { eq, and, or, gte, desc, isNull } from 'drizzle-orm';
+
+// Updated schema imports to match our new table structure
+const schema = {
+  learningSessions: {
+    id: 'id',
+    studentId: 'student_id',
+    subject: 'subject',
+    topic: 'topic',
+    startTime: 'start_time',
+    endTime: 'end_time',
+    duration: 'duration',
+    problemsAttempted: 'problems_attempted',
+    problemsCompleted: 'problems_completed',
+    correctAnswers: 'correct_answers',
+    hintsUsed: 'hints_used',
+    avgAttemptsPerProblem: 'avg_attempts_per_problem',
+    difficulty: 'difficulty',
+    sessionType: 'session_type',
+    createdAt: 'created_at',
+  },
+  problemAttempts: {
+    id: 'id',
+    sessionId: 'session_id',
+    studentId: 'student_id',
+    subject: 'subject',
+    topic: 'topic',
+    problemId: 'problem_id',
+    difficulty: 'difficulty',
+    attempts: 'attempts',
+    hintsUsed: 'hints_used',
+    timeSpent: 'time_spent',
+    isCorrect: 'is_correct',
+    isCompleted: 'is_completed',
+    needsAIIntervention: 'needs_ai_intervention',
+    skippedToFinalHint: 'skipped_to_final_hint',
+    timestamp: 'timestamp',
+  },
+  topicMastery: {
+    id: 'id',
+    studentId: 'student_id',
+    subject: 'subject',
+    topic: 'topic',
+    totalProblems: 'total_problems',
+    completedProblems: 'completed_problems',
+    accuracyRate: 'accuracy_rate',
+    averageAttempts: 'average_attempts',
+    averageHints: 'average_hints',
+    masteryLevel: 'mastery_level',
+    firstAttemptDate: 'first_attempt_date',
+    lastActivityDate: 'last_activity_date',
+    timeSpent: 'time_spent',
+    updatedAt: 'updated_at',
+  },
+  dailyActivity: {
+    id: 'id',
+    studentId: 'student_id',
+    date: 'date',
+    totalTime: 'total_time',
+    sessionsCount: 'sessions_count',
+    topicsWorked: 'topics_worked',
+    problemsAttempted: 'problems_attempted',
+    problemsCompleted: 'problems_completed',
+    accuracyRate: 'accuracy_rate',
+    createdAt: 'created_at',
+  },
+  studentAlerts: {
+    id: 'id',
+    studentId: 'student_id',
+    type: 'type',
+    severity: 'severity',
+    title: 'title',
+    message: 'message',
+    actionRequired: 'action_required',
+    isRead: 'is_read',
+    expiresAt: 'expires_at',
+    createdAt: 'created_at',
+  },
+  milestones: {
+    id: 'id',
+    studentId: 'student_id',
+    type: 'type',
+    title: 'title',
+    description: 'description',
+    badgeIcon: 'badge_icon',
+    points: 'points',
+    achievedAt: 'achieved_at',
+  },
+  parentGoals: {
+    id: 'id',
+    studentId: 'student_id',
+    subject: 'subject',
+    title: 'title',
+    description: 'description',
+    targetDate: 'target_date',
+    targetMetric: 'target_metric',
+    targetValue: 'target_value',
+    currentValue: 'current_value',
+    isCompleted: 'is_completed',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  },
+  examReadiness: {
+    id: 'id',
+    studentId: 'student_id',
+    subject: 'subject',
+    examType: 'exam_type',
+    overallScore: 'overall_score',
+    topicScores: 'topic_scores',
+    weakAreas: 'weak_areas',
+    strongAreas: 'strong_areas',
+    recommendedStudyTime: 'recommended_study_time',
+    estimatedReadinessDate: 'estimated_readiness_date',
+    lastUpdated: 'last_updated',
+  }
+};
 
 // Database connection
 const connectionString = process.env.DATABASE_URL || '';
-const sql = postgres(connectionString);
-export const db = drizzle(sql, { schema });
 
-// Storage class for dashboard metrics
+// Simple database interface using raw SQL for better control
 export class DashboardStorage {
-  
+  private sql: postgres.Sql;
+
+  constructor() {
+    this.sql = postgres(connectionString, {
+      max: 10, // Maximum number of connections
+    });
+  }
+
   // Learning Sessions
-  async createLearningSession(session: Omit<LearningSession, 'id'>): Promise<string> {
-    const [result] = await db.insert(schema.learningSessions).values({
-      childId: session.childId,
-      subject: session.subject,
-      topic: session.topic,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      duration: session.duration,
-      problemsAttempted: session.problemsAttempted,
-      problemsCompleted: session.problemsCompleted,
-      correctAnswers: session.correctAnswers,
-      hintsUsed: session.hintsUsed,
-      avgAttemptsPerProblem: session.avgAttemptsPerProblem.toString(),
-      difficulty: session.difficulty,
-      sessionType: session.sessionType,
-    }).returning({ id: schema.learningSessions.id });
+  async createLearningSession(session: {
+    studentId: number;
+    subject: string;
+    topic: string;
+    startTime: Date;
+    duration: number;
+    problemsAttempted: number;
+    problemsCompleted: number;
+    correctAnswers: number;
+    hintsUsed: number;
+    avgAttemptsPerProblem: number;
+    difficulty: 'easy' | 'medium' | 'hard';
+    sessionType: 'practice' | 'test' | 'review';
+  }): Promise<number> {
+    const [result] = await this.sql`
+      INSERT INTO learning_sessions (
+        student_id, subject, topic, start_time, duration,
+        problems_attempted, problems_completed, correct_answers,
+        hints_used, avg_attempts_per_problem, difficulty, session_type
+      ) VALUES (
+        ${session.studentId}, ${session.subject}, ${session.topic}, 
+        ${session.startTime}, ${session.duration}, ${session.problemsAttempted},
+        ${session.problemsCompleted}, ${session.correctAnswers}, ${session.hintsUsed},
+        ${session.avgAttemptsPerProblem}, ${session.difficulty}, ${session.sessionType}
+      ) RETURNING id
+    `;
     
     return result.id;
   }
 
-  async updateLearningSession(sessionId: string, updates: Partial<LearningSession>): Promise<void> {
-    await db.update(schema.learningSessions)
-      .set({
-        endTime: updates.endTime,
-        duration: updates.duration,
-        problemsAttempted: updates.problemsAttempted,
-        problemsCompleted: updates.problemsCompleted,
-        correctAnswers: updates.correctAnswers,
-        hintsUsed: updates.hintsUsed,
-        avgAttemptsPerProblem: updates.avgAttemptsPerProblem?.toString(),
-      })
-      .where(eq(schema.learningSessions.id, sessionId));
+  async updateLearningSession(sessionId: number, updates: {
+    endTime?: Date;
+    duration?: number;
+    problemsAttempted?: number;
+    problemsCompleted?: number;
+    correctAnswers?: number;
+    hintsUsed?: number;
+    avgAttemptsPerProblem?: number;
+  }): Promise<void> {
+    const setClause = [];
+    const values = [];
+    
+    if (updates.endTime !== undefined) {
+      setClause.push('end_time = $' + (values.length + 1));
+      values.push(updates.endTime);
+    }
+    if (updates.duration !== undefined) {
+      setClause.push('duration = $' + (values.length + 1));
+      values.push(updates.duration);
+    }
+    if (updates.problemsAttempted !== undefined) {
+      setClause.push('problems_attempted = $' + (values.length + 1));
+      values.push(updates.problemsAttempted);
+    }
+    if (updates.problemsCompleted !== undefined) {
+      setClause.push('problems_completed = $' + (values.length + 1));
+      values.push(updates.problemsCompleted);
+    }
+    if (updates.correctAnswers !== undefined) {
+      setClause.push('correct_answers = $' + (values.length + 1));
+      values.push(updates.correctAnswers);
+    }
+    if (updates.hintsUsed !== undefined) {
+      setClause.push('hints_used = $' + (values.length + 1));
+      values.push(updates.hintsUsed);
+    }
+    if (updates.avgAttemptsPerProblem !== undefined) {
+      setClause.push('avg_attempts_per_problem = $' + (values.length + 1));
+      values.push(updates.avgAttemptsPerProblem);
+    }
+
+    if (setClause.length > 0) {
+      values.push(sessionId);
+      await this.sql.unsafe(`
+        UPDATE learning_sessions 
+        SET ${setClause.join(', ')}
+        WHERE id = $${values.length}
+      `, values);
+    }
   }
 
   // Problem Attempts
-  async recordProblemAttempt(attempt: Omit<ProblemAttempt, 'id'>): Promise<string> {
-    const [result] = await db.insert(schema.problemAttempts).values({
-      sessionId: attempt.sessionId,
-      childId: attempt.childId,
-      subject: attempt.subject,
-      topic: attempt.topic,
-      problemId: attempt.problemId,
-      difficulty: attempt.difficulty,
-      attempts: attempt.attempts,
-      hintsUsed: attempt.hintsUsed,
-      timeSpent: attempt.timeSpent,
-      isCorrect: attempt.isCorrect,
-      isCompleted: attempt.isCompleted,
-      needsAIIntervention: attempt.needsAIIntervention,
-      skippedToFinalHint: attempt.skippedToFinalHint,
-      timestamp: attempt.timestamp,
-    }).returning({ id: schema.problemAttempts.id });
+  async recordProblemAttempt(attempt: {
+    sessionId: number;
+    studentId: number;
+    subject: string;
+    topic: string;
+    problemId: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    attempts: number;
+    hintsUsed: number;
+    timeSpent: number;
+    isCorrect: boolean;
+    isCompleted: boolean;
+    needsAIIntervention: boolean;
+    skippedToFinalHint: boolean;
+  }): Promise<number> {
+    const [result] = await this.sql`
+      INSERT INTO problem_attempts (
+        session_id, student_id, subject, topic, problem_id,
+        difficulty, attempts, hints_used, time_spent,
+        is_correct, is_completed, needs_ai_intervention, skipped_to_final_hint
+      ) VALUES (
+        ${attempt.sessionId}, ${attempt.studentId}, ${attempt.subject},
+        ${attempt.topic}, ${attempt.problemId}, ${attempt.difficulty},
+        ${attempt.attempts}, ${attempt.hintsUsed}, ${attempt.timeSpent},
+        ${attempt.isCorrect}, ${attempt.isCompleted}, ${attempt.needsAIIntervention},
+        ${attempt.skippedToFinalHint}
+      ) RETURNING id
+    `;
     
     return result.id;
   }
 
   // Topic Mastery
-  async updateTopicMastery(childId: string, subject: string, topic: string, mastery: Partial<TopicMastery>): Promise<void> {
-    // Check if exists, update or insert
-    const existing = await db.select()
-      .from(schema.topicMastery)
-      .where(and(
-        eq(schema.topicMastery.childId, childId),
-        eq(schema.topicMastery.subject, subject),
-        eq(schema.topicMastery.topic, topic)
-      ))
-      .limit(1);
+  async updateTopicMastery(studentId: number, subject: string, topic: string, mastery: {
+    totalProblems?: number;
+    completedProblems?: number;
+    accuracyRate?: number;
+    averageAttempts?: number;
+    averageHints?: number;
+    masteryLevel?: 'novice' | 'developing' | 'proficient' | 'mastered';
+    lastActivityDate?: Date;
+    timeSpent?: number;
+  }): Promise<void> {
+    // Check if exists
+    const existing = await this.sql`
+      SELECT id FROM topic_mastery 
+      WHERE student_id = ${studentId} AND subject = ${subject} AND topic = ${topic}
+      LIMIT 1
+    `;
 
     if (existing.length > 0) {
-      await db.update(schema.topicMastery)
-        .set({
-          totalProblems: mastery.totalProblems,
-          completedProblems: mastery.completedProblems,
-          accuracyRate: mastery.accuracyRate?.toString(),
-          averageAttempts: mastery.averageAttempts?.toString(),
-          averageHints: mastery.averageHints?.toString(),
-          masteryLevel: mastery.masteryLevel,
-          lastActivityDate: mastery.lastActivityDate,
-          timeSpent: mastery.timeSpent,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.topicMastery.id, existing[0].id));
-    } else {
-      await db.insert(schema.topicMastery).values({
-        childId,
-        subject,
-        topic,
-        totalProblems: mastery.totalProblems || 0,
-        completedProblems: mastery.completedProblems || 0,
-        accuracyRate: mastery.accuracyRate?.toString() || '0',
-        averageAttempts: mastery.averageAttempts?.toString() || '0',
-        averageHints: mastery.averageHints?.toString() || '0',
-        masteryLevel: mastery.masteryLevel || 'novice',
-        firstAttemptDate: mastery.firstAttemptDate || new Date(),
-        lastActivityDate: mastery.lastActivityDate || new Date(),
-        timeSpent: mastery.timeSpent || 0,
+      // Update existing
+      const setClause = [];
+      const values = [];
+      
+      Object.entries(mastery).forEach(([key, value]) => {
+        if (value !== undefined) {
+          const dbColumn = {
+            totalProblems: 'total_problems',
+            completedProblems: 'completed_problems',
+            accuracyRate: 'accuracy_rate',
+            averageAttempts: 'average_attempts',
+            averageHints: 'average_hints',
+            masteryLevel: 'mastery_level',
+            lastActivityDate: 'last_activity_date',
+            timeSpent: 'time_spent',
+          }[key];
+          
+          if (dbColumn) {
+            setClause.push(`${dbColumn} = $${values.length + 1}`);
+            values.push(value);
+          }
+        }
       });
+
+      if (setClause.length > 0) {
+        setClause.push('updated_at = CURRENT_TIMESTAMP');
+        values.push(existing[0].id);
+        await this.sql.unsafe(`
+          UPDATE topic_mastery 
+          SET ${setClause.join(', ')}
+          WHERE id = $${values.length}
+        `, values);
+      }
+    } else {
+      // Insert new
+      await this.sql`
+        INSERT INTO topic_mastery (
+          student_id, subject, topic, total_problems, completed_problems,
+          accuracy_rate, average_attempts, average_hints, mastery_level,
+          first_attempt_date, last_activity_date, time_spent
+        ) VALUES (
+          ${studentId}, ${subject}, ${topic}, ${mastery.totalProblems || 0},
+          ${mastery.completedProblems || 0}, ${mastery.accuracyRate || 0},
+          ${mastery.averageAttempts || 0}, ${mastery.averageHints || 0},
+          ${mastery.masteryLevel || 'novice'}, CURRENT_TIMESTAMP,
+          ${mastery.lastActivityDate || new Date()}, ${mastery.timeSpent || 0}
+        )
+      `;
     }
   }
 
   // Daily Activity
-  async updateDailyActivity(childId: string, date: string, activity: Partial<DailyActivity>): Promise<void> {
-    const existing = await db.select()
-      .from(schema.dailyActivity)
-      .where(and(
-        eq(schema.dailyActivity.childId, childId),
-        eq(schema.dailyActivity.date, date)
-      ))
-      .limit(1);
-
-    if (existing.length > 0) {
-      await db.update(schema.dailyActivity)
-        .set({
-          totalTime: activity.totalTime,
-          sessionsCount: activity.sessionsCount,
-          topicsWorked: activity.topicsWorked,
-          problemsAttempted: activity.problemsAttempted,
-          problemsCompleted: activity.problemsCompleted,
-          accuracyRate: activity.accuracyRate?.toString(),
-        })
-        .where(eq(schema.dailyActivity.id, existing[0].id));
-    } else {
-      await db.insert(schema.dailyActivity).values({
-        childId,
-        date,
-        totalTime: activity.totalTime || 0,
-        sessionsCount: activity.sessionsCount || 0,
-        topicsWorked: activity.topicsWorked || [],
-        problemsAttempted: activity.problemsAttempted || 0,
-        problemsCompleted: activity.problemsCompleted || 0,
-        accuracyRate: activity.accuracyRate?.toString() || '0',
-      });
-    }
+  async updateDailyActivity(studentId: number, date: string, activity: {
+    totalTime?: number;
+    sessionsCount?: number;
+    topicsWorked?: string[];
+    problemsAttempted?: number;
+    problemsCompleted?: number;
+    accuracyRate?: number;
+  }): Promise<void> {
+    // Upsert daily activity
+    await this.sql`
+      INSERT INTO daily_activity (
+        student_id, date, total_time, sessions_count, topics_worked,
+        problems_attempted, problems_completed, accuracy_rate
+      ) VALUES (
+        ${studentId}, ${date}, ${activity.totalTime || 0},
+        ${activity.sessionsCount || 0}, ${JSON.stringify(activity.topicsWorked || [])},
+        ${activity.problemsAttempted || 0}, ${activity.problemsCompleted || 0},
+        ${activity.accuracyRate || 0}
+      )
+      ON CONFLICT (student_id, date) 
+      DO UPDATE SET
+        total_time = EXCLUDED.total_time,
+        sessions_count = EXCLUDED.sessions_count,
+        topics_worked = EXCLUDED.topics_worked,
+        problems_attempted = EXCLUDED.problems_attempted,
+        problems_completed = EXCLUDED.problems_completed,
+        accuracy_rate = EXCLUDED.accuracy_rate
+    `;
   }
 
   // Goals
-  async createParentGoal(goal: Omit<ParentGoal, 'id'>): Promise<string> {
-    const [result] = await db.insert(schema.parentGoals).values({
-      childId: goal.childId,
-      subject: goal.subject,
-      title: goal.title,
-      description: goal.description,
-      targetDate: goal.targetDate,
-      targetMetric: goal.targetMetric,
-      targetValue: goal.targetValue.toString(),
-      currentValue: goal.currentValue.toString(),
-      isCompleted: goal.isCompleted,
-    }).returning({ id: schema.parentGoals.id });
+  async createParentGoal(goal: {
+    studentId: number;
+    subject: string;
+    title: string;
+    description?: string;
+    targetDate: Date;
+    targetMetric: 'accuracy' | 'completion' | 'time' | 'mastery';
+    targetValue: number;
+    currentValue: number;
+    isCompleted: boolean;
+  }): Promise<number> {
+    const [result] = await this.sql`
+      INSERT INTO parent_goals (
+        student_id, subject, title, description, target_date,
+        target_metric, target_value, current_value, is_completed
+      ) VALUES (
+        ${goal.studentId}, ${goal.subject}, ${goal.title}, ${goal.description || ''},
+        ${goal.targetDate}, ${goal.targetMetric}, ${goal.targetValue},
+        ${goal.currentValue}, ${goal.isCompleted}
+      ) RETURNING id
+    `;
     
     return result.id;
   }
 
-  async updateGoalProgress(goalId: string, currentValue: number, isCompleted?: boolean): Promise<void> {
-    await db.update(schema.parentGoals)
-      .set({
-        currentValue: currentValue.toString(),
-        isCompleted: isCompleted,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.parentGoals.id, goalId));
+  async updateGoalProgress(goalId: number, currentValue: number, isCompleted?: boolean): Promise<void> {
+    await this.sql`
+      UPDATE parent_goals 
+      SET current_value = ${currentValue}, 
+          is_completed = ${isCompleted !== undefined ? isCompleted : false},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${goalId}
+    `;
   }
 
   // Alerts
-  async createAlert(alert: Omit<Alert, 'id'>): Promise<string> {
-    const [result] = await db.insert(schema.alerts).values({
-      childId: alert.childId,
-      type: alert.type,
-      severity: alert.severity,
-      title: alert.title,
-      message: alert.message,
-      actionRequired: alert.actionRequired,
-      isRead: alert.isRead,
-      expiresAt: alert.expiresAt,
-    }).returning({ id: schema.alerts.id });
+  async createAlert(alert: {
+    studentId: number;
+    type: 'struggle' | 'engagement' | 'readiness' | 'goal' | 'milestone';
+    severity: 'low' | 'medium' | 'high';
+    title: string;
+    message: string;
+    actionRequired: boolean;
+    isRead: boolean;
+    expiresAt?: Date;
+  }): Promise<number> {
+    const [result] = await this.sql`
+      INSERT INTO student_alerts (
+        student_id, type, severity, title, message,
+        action_required, is_read, expires_at
+      ) VALUES (
+        ${alert.studentId}, ${alert.type}, ${alert.severity}, ${alert.title},
+        ${alert.message}, ${alert.actionRequired}, ${alert.isRead}, ${alert.expiresAt || null}
+      ) RETURNING id
+    `;
     
     return result.id;
   }
 
-  async markAlertAsRead(alertId: string): Promise<void> {
-    await db.update(schema.alerts)
-      .set({ isRead: true })
-      .where(eq(schema.alerts.id, alertId));
+  async markAlertAsRead(alertId: number): Promise<void> {
+    await this.sql`
+      UPDATE student_alerts SET is_read = true WHERE id = ${alertId}
+    `;
   }
 
   // Milestones
-  async createMilestone(milestone: Omit<Milestone, 'id'>): Promise<string> {
-    const [result] = await db.insert(schema.milestones).values({
-      childId: milestone.childId,
-      type: milestone.type,
-      title: milestone.title,
-      description: milestone.description,
-      badgeIcon: milestone.badgeIcon,
-      points: milestone.points,
-      achievedAt: milestone.achievedAt,
-    }).returning({ id: schema.milestones.id });
+  async createMilestone(milestone: {
+    studentId: number;
+    type: 'topic_mastery' | 'accuracy_streak' | 'time_goal' | 'consistency';
+    title: string;
+    description?: string;
+    badgeIcon: string;
+    points: number;
+  }): Promise<number> {
+    const [result] = await this.sql`
+      INSERT INTO milestones (
+        student_id, type, title, description, badge_icon, points
+      ) VALUES (
+        ${milestone.studentId}, ${milestone.type}, ${milestone.title},
+        ${milestone.description || ''}, ${milestone.badgeIcon}, ${milestone.points}
+      ) RETURNING id
+    `;
     
     return result.id;
   }
 
   // Query methods for dashboard
-  async getChildLearningHistory(childId: string, subject: string, days: number = 30): Promise<LearningSession[]> {
+  async getChildLearningHistory(studentId: number, subject: string, days: number = 30) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
-    const sessions = await db.select()
-      .from(schema.learningSessions)
-      .where(and(
-        eq(schema.learningSessions.childId, childId),
-        eq(schema.learningSessions.subject, subject),
-        gte(schema.learningSessions.startTime, cutoffDate)
-      ))
-      .orderBy(desc(schema.learningSessions.startTime));
+    const sessions = await this.sql`
+      SELECT * FROM learning_sessions 
+      WHERE student_id = ${studentId} 
+        AND subject = ${subject}
+        AND start_time >= ${cutoffDate}
+      ORDER BY start_time DESC
+    `;
 
     return sessions.map(session => ({
-      id: session.id,
-      childId: session.childId,
+      id: session.id.toString(),
+      childId: session.student_id.toString(),
       subject: session.subject,
       topic: session.topic,
-      startTime: session.startTime,
-      endTime: session.endTime || undefined,
+      startTime: session.start_time,
+      endTime: session.end_time || undefined,
       duration: session.duration,
-      problemsAttempted: session.problemsAttempted,
-      problemsCompleted: session.problemsCompleted,
-      correctAnswers: session.correctAnswers,
-      hintsUsed: session.hintsUsed,
-      avgAttemptsPerProblem: parseFloat(session.avgAttemptsPerProblem),
+      problemsAttempted: session.problems_attempted,
+      problemsCompleted: session.problems_completed,
+      correctAnswers: session.correct_answers,
+      hintsUsed: session.hints_used,
+      avgAttemptsPerProblem: parseFloat(session.avg_attempts_per_problem),
       difficulty: session.difficulty as 'easy' | 'medium' | 'hard',
-      sessionType: session.sessionType as 'practice' | 'test' | 'review',
+      sessionType: session.session_type as 'practice' | 'test' | 'review',
     }));
   }
 
-  async getTopicMasteryData(childId: string, subject: string): Promise<TopicMastery[]> {
-    const mastery = await db.select()
-      .from(schema.topicMastery)
-      .where(and(
-        eq(schema.topicMastery.childId, childId),
-        eq(schema.topicMastery.subject, subject)
-      ));
+  async getTopicMasteryData(studentId: number, subject: string) {
+    const mastery = await this.sql`
+      SELECT * FROM topic_mastery 
+      WHERE student_id = ${studentId} AND subject = ${subject}
+    `;
 
     return mastery.map(m => ({
-      childId: m.childId,
+      childId: m.student_id.toString(),
       subject: m.subject,
       topic: m.topic,
-      totalProblems: m.totalProblems,
-      completedProblems: m.completedProblems,
-      accuracyRate: parseFloat(m.accuracyRate),
-      averageAttempts: parseFloat(m.averageAttempts),
-      averageHints: parseFloat(m.averageHints),
-      masteryLevel: m.masteryLevel as 'novice' | 'developing' | 'proficient' | 'mastered',
-      firstAttemptDate: m.firstAttemptDate!,
-      lastActivityDate: m.lastActivityDate!,
-      timeSpent: m.timeSpent,
+      totalProblems: m.total_problems,
+      completedProblems: m.completed_problems,
+      accuracyRate: parseFloat(m.accuracy_rate),
+      averageAttempts: parseFloat(m.average_attempts),
+      averageHints: parseFloat(m.average_hints),
+      masteryLevel: m.mastery_level as 'novice' | 'developing' | 'proficient' | 'mastered',
+      firstAttemptDate: m.first_attempt_date!,
+      lastActivityDate: m.last_activity_date!,
+      timeSpent: m.time_spent,
     }));
   }
 
-  async getDailyActivityData(childId: string, days: number = 30): Promise<DailyActivity[]> {
+  async getDailyActivityData(studentId: number, days: number = 30) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
 
-    const activity = await db.select()
-      .from(schema.dailyActivity)
-      .where(and(
-        eq(schema.dailyActivity.childId, childId),
-        gte(schema.dailyActivity.date, cutoffDateStr)
-      ))
-      .orderBy(desc(schema.dailyActivity.date));
+    const activity = await this.sql`
+      SELECT * FROM daily_activity 
+      WHERE student_id = ${studentId} AND date >= ${cutoffDateStr}
+      ORDER BY date DESC
+    `;
 
     return activity.map(a => ({
-      childId: a.childId,
+      childId: a.student_id.toString(),
       date: a.date,
-      totalTime: a.totalTime,
-      sessionsCount: a.sessionsCount,
-      topicsWorked: a.topicsWorked as string[],
-      problemsAttempted: a.problemsAttempted,
-      problemsCompleted: a.problemsCompleted,
-      accuracyRate: parseFloat(a.accuracyRate),
+      totalTime: a.total_time,
+      sessionsCount: a.sessions_count,
+      topicsWorked: a.topics_worked as string[],
+      problemsAttempted: a.problems_attempted,
+      problemsCompleted: a.problems_completed,
+      accuracyRate: parseFloat(a.accuracy_rate),
     }));
   }
 
-  async getActiveAlerts(childId: string): Promise<Alert[]> {
+  async getActiveAlerts(studentId: number) {
     const now = new Date();
-    const alerts = await db.select()
-      .from(schema.alerts)
-      .where(and(
-        eq(schema.alerts.childId, childId),
-        eq(schema.alerts.isRead, false),
-        or(
-          isNull(schema.alerts.expiresAt),
-          gte(schema.alerts.expiresAt, now)
-        )
-      ))
-      .orderBy(desc(schema.alerts.createdAt));
+    const alerts = await this.sql`
+      SELECT * FROM student_alerts 
+      WHERE student_id = ${studentId} 
+        AND is_read = false
+        AND (expires_at IS NULL OR expires_at >= ${now})
+      ORDER BY created_at DESC
+    `;
 
     return alerts.map(a => ({
-      id: a.id,
-      childId: a.childId,
+      id: a.id.toString(),
+      childId: a.student_id.toString(),
       type: a.type as 'struggle' | 'engagement' | 'readiness' | 'goal' | 'milestone',
       severity: a.severity as 'low' | 'medium' | 'high',
       title: a.title,
       message: a.message,
-      actionRequired: a.actionRequired,
-      isRead: a.isRead,
-      createdAt: a.createdAt!,
-      expiresAt: a.expiresAt || undefined,
+      actionRequired: a.action_required,
+      isRead: a.is_read,
+      createdAt: a.created_at!,
+      expiresAt: a.expires_at || undefined,
     }));
   }
 
-  async getRecentMilestones(childId: string, limit: number = 5): Promise<Milestone[]> {
-    const milestones = await db.select()
-      .from(schema.milestones)
-      .where(eq(schema.milestones.childId, childId))
-      .orderBy(desc(schema.milestones.achievedAt))
-      .limit(limit);
+  async getRecentMilestones(studentId: number, limit: number = 5) {
+    const milestones = await this.sql`
+      SELECT * FROM milestones 
+      WHERE student_id = ${studentId}
+      ORDER BY achieved_at DESC
+      LIMIT ${limit}
+    `;
 
     return milestones.map(m => ({
-      id: m.id,
-      childId: m.childId,
+      id: m.id.toString(),
+      childId: m.student_id.toString(),
       type: m.type as 'topic_mastery' | 'accuracy_streak' | 'time_goal' | 'consistency',
       title: m.title,
       description: m.description || '',
-      achievedAt: m.achievedAt!,
-      badgeIcon: m.badgeIcon,
+      achievedAt: m.achieved_at!,
+      badgeIcon: m.badge_icon,
       points: m.points,
     }));
   }
-}
 
-// Import missing functions from drizzle-orm
-import { eq, and, or, gte, desc, isNull } from 'drizzle-orm';
+  async getParentGoals(studentId: number, subject: string) {
+    const goals = await this.sql`
+      SELECT * FROM parent_goals 
+      WHERE student_id = ${studentId} AND subject = ${subject}
+      ORDER BY created_at DESC
+    `;
+
+    return goals.map(g => ({
+      id: g.id.toString(),
+      childId: g.student_id.toString(),
+      subject: g.subject,
+      title: g.title,
+      description: g.description || '',
+      targetDate: g.target_date,
+      targetMetric: g.target_metric as 'accuracy' | 'completion' | 'time' | 'mastery',
+      targetValue: parseFloat(g.target_value),
+      currentValue: parseFloat(g.current_value),
+      isCompleted: g.is_completed,
+      createdAt: g.created_at,
+    }));
+  }
+
+  async getExamReadiness(studentId: number, subject: string) {
+    const readiness = await this.sql`
+      SELECT * FROM exam_readiness 
+      WHERE student_id = ${studentId} AND subject = ${subject}
+      ORDER BY last_updated DESC
+      LIMIT 1
+    `;
+
+    if (readiness.length === 0) return null;
+
+    const r = readiness[0];
+    return {
+      childId: r.student_id.toString(),
+      subject: r.subject,
+      examType: r.exam_type,
+      overallScore: parseFloat(r.overall_score),
+      topicScores: r.topic_scores as Record<string, number>,
+      weakAreas: r.weak_areas as string[],
+      strongAreas: r.strong_areas as string[],
+      recommendedStudyTime: r.recommended_study_time,
+      estimatedReadinessDate: r.estimated_readiness_date!,
+      lastUpdated: r.last_updated!,
+    };
+  }
+
+  // Close database connection
+  async close() {
+    await this.sql.end();
+  }
+}
