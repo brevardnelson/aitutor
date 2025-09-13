@@ -70,6 +70,8 @@ export const problemAttempts = pgTable('problem_attempts', {
   isCompleted: boolean('is_completed').default(false),
   needsAIIntervention: boolean('needs_ai_intervention').default(false),
   skippedToFinalHint: boolean('skipped_to_final_hint').default(false),
+  errorType: varchar('error_type'), // Common error classification for teacher insights
+  misconceptionId: varchar('misconception_id'), // Link to common misconceptions
   timestamp: timestamp('timestamp').defaultNow(),
 });
 
@@ -276,6 +278,115 @@ export const userRoles = pgTable('user_roles', {
 }, (table) => ({
   // Prevent duplicate role assignments per user-school-role combination
   uniqueUserSchoolRole: unique().on(table.userId, table.schoolId, table.role),
+}));
+
+// Teacher assignments - custom assignments created by teachers
+export const teacherAssignments = pgTable('teacher_assignments', {
+  id: serial('id').primaryKey(),
+  teacherId: integer('teacher_id').references(() => users.id).notNull(),
+  classId: integer('class_id').references(() => classes.id).notNull(),
+  title: varchar('title').notNull(),
+  description: text('description'),
+  subject: varchar('subject').notNull(),
+  topics: json('topics').$type<string[]>(), // Array of topics covered
+  difficulty: varchar('difficulty').notNull(), // 'easy', 'medium', 'hard'
+  totalProblems: integer('total_problems').notNull(),
+  dueDate: timestamp('due_date'),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Assignment submissions - student work on teacher assignments
+export const assignmentSubmissions = pgTable('assignment_submissions', {
+  id: serial('id').primaryKey(),
+  assignmentId: integer('assignment_id').references(() => teacherAssignments.id).notNull(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  problemsAttempted: integer('problems_attempted').default(0),
+  problemsCompleted: integer('problems_completed').default(0),
+  correctAnswers: integer('correct_answers').default(0),
+  totalTimeSpent: integer('total_time_spent').default(0), // in minutes
+  accuracyRate: decimal('accuracy_rate').default('0'),
+  isCompleted: boolean('is_completed').default(false),
+  submittedAt: timestamp('submitted_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique submission per student per assignment
+  uniqueStudentAssignment: unique().on(table.studentId, table.assignmentId),
+}));
+
+// Common misconceptions catalog for teacher insights
+export const misconceptions = pgTable('misconceptions', {
+  id: varchar('id').primaryKey(), // e.g., "fraction_addition_common_denominator"
+  subject: varchar('subject').notNull(),
+  topic: varchar('topic').notNull(),
+  title: varchar('title').notNull(),
+  description: text('description').notNull(),
+  correctConcept: text('correct_concept'),
+  commonErrors: json('common_errors').$type<string[]>(),
+  remediation: text('remediation'), // Suggested teaching approaches
+  difficulty: varchar('difficulty').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Class performance benchmarks for comparison
+export const classBenchmarks = pgTable('class_benchmarks', {
+  id: serial('id').primaryKey(),
+  gradeLevel: varchar('grade_level').notNull(),
+  subject: varchar('subject').notNull(),
+  topic: varchar('topic').notNull(),
+  expectedAccuracy: decimal('expected_accuracy').notNull(), // Percentage
+  expectedMasteryTime: integer('expected_mastery_time'), // Expected hours to mastery
+  nationalAverage: decimal('national_average'), // Comparison baseline
+  difficultyLevel: varchar('difficulty_level').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique benchmark per grade-subject-topic-difficulty
+  uniqueBenchmark: unique().on(table.gradeLevel, table.subject, table.topic, table.difficultyLevel),
+}));
+
+// Student alerts for teachers - flagging at-risk students
+export const studentAlerts = pgTable('student_alerts', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  teacherId: integer('teacher_id').references(() => users.id).notNull(),
+  classId: integer('class_id').references(() => classes.id).notNull(),
+  alertType: varchar('alert_type').notNull(), // 'low_engagement', 'poor_performance', 'needs_intervention', 'at_risk'
+  severity: varchar('severity').notNull(), // 'low', 'medium', 'high', 'critical'
+  subject: varchar('subject'),
+  topic: varchar('topic'),
+  message: text('message').notNull(),
+  actionRequired: text('action_required'),
+  isResolved: boolean('is_resolved').default(false),
+  resolvedAt: timestamp('resolved_at'),
+  resolvedBy: integer('resolved_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Class analytics summary - pre-computed for teacher dashboard
+export const classAnalytics = pgTable('class_analytics', {
+  id: serial('id').primaryKey(),
+  classId: integer('class_id').references(() => classes.id).notNull(),
+  teacherId: integer('teacher_id').references(() => users.id).notNull(),
+  dateRange: varchar('date_range').notNull(), // 'daily', 'weekly', 'monthly'
+  date: varchar('date').notNull(), // YYYY-MM-DD or YYYY-Www format
+  totalStudents: integer('total_students').default(0),
+  activeStudents: integer('active_students').default(0),
+  avgTimePerStudent: decimal('avg_time_per_student').default('0'), // minutes
+  avgAccuracyRate: decimal('avg_accuracy_rate').default('0'), // percentage
+  topicsCovered: integer('topics_covered').default(0),
+  problemsAttempted: integer('problems_attempted').default(0),
+  problemsCompleted: integer('problems_completed').default(0),
+  hintsUsed: integer('hints_used').default(0),
+  interventionsNeeded: integer('interventions_needed').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique analytics per class per date range per date
+  uniqueClassAnalytics: unique().on(table.classId, table.dateRange, table.date),
 }));
 
 // Invitations for users to join schools/classes
