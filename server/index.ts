@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { dashboardAPI } from './api';
 import authRoutes from './auth-routes';
+import adminRoutes from './admin-routes';
 import { authenticateToken } from './auth-middleware';
 import { verifyChildAccess, verifyStudentAccess, verifySessionAccess } from './resource-authorization';
 import { validateParamIds, validateBodyIds, getValidatedId } from './id-validation-middleware';
@@ -19,6 +20,9 @@ app.use(express.json());
 
 // Authentication routes
 app.use('/api/auth', authRoutes);
+
+// Admin routes
+app.use('/api/admin', adminRoutes);
 
 // Dashboard API routes (now with proper resource authorization and ID validation)
 app.get('/api/dashboard/:childId/:subject', 

@@ -1,7 +1,7 @@
 // RBAC Context for Multi-Institutional Platform
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { rbacAuthService } from '@/lib/rbac-auth';
+import { rbacAuthAPI } from '@/lib/rbac-auth-api';
 import type { AuthUser, UserRole, School } from '@/types/auth';
 
 interface RBACContextType {
@@ -79,12 +79,12 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const checkAuthState = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await rbacAuthService.getCurrentUser();
+      const currentUser = await rbacAuthAPI.getCurrentUser();
       setUser(currentUser);
       
       if (currentUser) {
         // Set current school from user's primary school role
-        const schoolRole = currentUser.roles.find(r => r.schoolId);
+        const schoolRole = currentUser.roles?.find(r => r.schoolId);
         if (schoolRole && currentUser.currentSchool) {
           setCurrentSchool(currentUser.currentSchool);
         }
@@ -102,7 +102,8 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return;
     
     try {
-      const schools = await rbacAuthService.getSchoolsForUser(user.id);
+      const result = await rbacAuthAPI.getSchools();
+      const schools = result.success ? result.schools || [] : [];
       setAvailableSchools(schools);
       
       // Set current school if not set and user has schools
@@ -116,7 +117,7 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const result = await rbacAuthService.signIn(email, password);
+      const result = await rbacAuthAPI.signIn(email, password);
       if (result.error) {
         return { success: false, error: result.error };
       }
@@ -124,7 +125,7 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const authUser: AuthUser = {
           ...result.user,
           roles: result.roles,
-          primaryRole: rbacAuthService.getPrimaryRole(result.roles),
+          primaryRole: rbacAuthAPI.getPrimaryRole(result.roles),
         };
         setUser(authUser);
         return { success: true };
@@ -143,28 +144,13 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     schoolId?: number,
     phone?: string
   ): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const result = await rbacAuthService.signUp(email, password, fullName, role, schoolId, phone);
-      if (result.error) {
-        return { success: false, error: result.error };
-      }
-      if (result.user && result.roles) {
-        const authUser: AuthUser = {
-          ...result.user,
-          roles: result.roles,
-          primaryRole: rbacAuthService.getPrimaryRole(result.roles),
-        };
-        setUser(authUser);
-        return { success: true };
-      }
-      return { success: false, error: 'Unknown error occurred' };
-    } catch (error) {
-      return { success: false, error: 'Network error' };
-    }
+    // Note: In the new system, users are invited rather than signing up directly
+    // This method is maintained for compatibility but should not be used
+    return { success: false, error: 'Direct signup not supported. Users must be invited by administrators.' };
   };
 
   const signOut = async (): Promise<void> => {
-    await rbacAuthService.signOut();
+    await rbacAuthAPI.signOut();
     setUser(null);
     setCurrentSchool(null);
     setAvailableSchools([]);
@@ -182,19 +168,19 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Permission checking helpers
   const hasRole = (role: UserRole, schoolId?: number): boolean => {
-    return rbacAuthService.hasRole(user, role, schoolId);
+    return rbacAuthAPI.hasRole(user, role, schoolId);
   };
 
   const hasPermission = (permission: string, schoolId?: number): boolean => {
-    return rbacAuthService.hasPermission(user, permission, schoolId);
+    return rbacAuthAPI.hasPermission(user, permission, schoolId);
   };
 
   const hasAnyRole = (roles: UserRole[], schoolId?: number): boolean => {
-    return rbacAuthService.hasAnyRole(user, roles, schoolId);
+    return rbacAuthAPI.hasAnyRole(user, roles, schoolId);
   };
 
   const canAccessSchool = (schoolId: number): boolean => {
-    return rbacAuthService.canAccessSchool(user, schoolId);
+    return rbacAuthAPI.canAccessSchool(user, schoolId);
   };
 
   // Admin operations
@@ -205,7 +191,7 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }): Promise<{ success: boolean; error?: string }> => {
     if (!user) return { success: false, error: 'Not authenticated' };
     
-    return await rbacAuthService.inviteUser(user, userData);
+    return await rbacAuthAPI.inviteUser(userData);
   };
 
   const createSchool = async (schoolData: {
@@ -217,15 +203,15 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return { success: false, error: 'Not authenticated' };
     
     try {
-      const school = await rbacAuthService.createSchool({
-        ...schoolData,
-        adminId: user.id,
-      });
+      const result = await rbacAuthAPI.createSchool(schoolData);
       
-      // Refresh available schools
-      await refreshSchools();
-      
-      return { success: true, school };
+      if (result.success) {
+        // Refresh available schools
+        await refreshSchools();
+        return { success: true, school: result.school };
+      } else {
+        return { success: false, error: result.error || 'Failed to create school' };
+      }
     } catch (error) {
       return { success: false, error: 'Failed to create school' };
     }
