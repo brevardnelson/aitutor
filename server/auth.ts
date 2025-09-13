@@ -13,8 +13,12 @@ const connectionString = process.env.DATABASE_URL!;
 const sql = postgres(connectionString);
 const db = drizzle(sql, { schema });
 
-// JWT Configuration
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+// JWT Configuration - REQUIRE secure secret in production
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable must be set for security');
+  process.exit(1);
+}
 const JWT_EXPIRES_IN = '24h';
 const SALT_ROUNDS = 12;
 

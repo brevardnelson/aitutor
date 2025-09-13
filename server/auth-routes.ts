@@ -1,11 +1,51 @@
 // Authentication API Routes
 
 import express, { Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import Joi from 'joi';
 import { authService } from './auth';
 import { authenticateToken, requireSystemAdmin, requireSchoolAdmin } from './auth-middleware';
 
 const router = express.Router();
+
+// Rate limiting middleware for authentication endpoints
+// Strict rate limiting for signin to prevent brute force attacks
+const signinRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 signin requests per windowMs
+  message: {
+    error: 'Too many signin attempts from this IP, please try again in 15 minutes.',
+    retryAfter: 15 * 60 // 15 minutes in seconds
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting for successful requests to allow legitimate users
+  skipSuccessfulRequests: true,
+});
+
+// Moderate rate limiting for other auth endpoints
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 requests per windowMs
+  message: {
+    error: 'Too many authentication requests from this IP, please try again later.',
+    retryAfter: 15 * 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Very strict rate limiting for account creation (prevent automated account creation)
+const createAccountRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit each IP to 3 account creation attempts per hour
+  message: {
+    error: 'Too many account creation attempts from this IP, please try again in 1 hour.',
+    retryAfter: 60 * 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const signInSchema = Joi.object({
@@ -33,7 +73,7 @@ const createSystemAdminSchema = Joi.object({
 });
 
 // POST /api/auth/signin
-router.post('/signin', async (req: Request, res: Response) => {
+router.post('/signin', signinRateLimit, async (req: Request, res: Response) => {
   try {
     const { error, value } = signInSchema.validate(req.body);
     if (error) {
@@ -62,7 +102,7 @@ router.post('/signin', async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/complete-invitation
-router.post('/complete-invitation', async (req: Request, res: Response) => {
+router.post('/complete-invitation', createAccountRateLimit, async (req: Request, res: Response) => {
   try {
     const { error, value } = completeInvitationSchema.validate(req.body);
     if (error) {
@@ -112,7 +152,7 @@ router.get('/me', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/invite - Invite a new user (admin only)
-router.post('/invite', authenticateToken, requireSchoolAdmin, async (req: Request, res: Response) => {
+router.post('/invite', authRateLimit, authenticateToken, requireSchoolAdmin, async (req: Request, res: Response) => {
   try {
     const { error, value } = inviteUserSchema.validate(req.body);
     if (error) {
@@ -145,9 +185,9 @@ router.post('/invite', authenticateToken, requireSchoolAdmin, async (req: Reques
     // For now, return the token for testing
     res.json({
       success: true,
-      message: 'Invitation created successfully',
-      // Remove token from response in production
-      invitationToken: result.invitation?.token,
+      message: 'Invitation sent successfully',
+      // Token is NOT returned for security - delivered via email/secure channel only
+      invitationId: result.invitation?.id,
     });
   } catch (error) {
     console.error('Invite user error:', error);
@@ -156,7 +196,7 @@ router.post('/invite', authenticateToken, requireSchoolAdmin, async (req: Reques
 });
 
 // POST /api/auth/create-system-admin - Bootstrap system admin (dev only)
-router.post('/create-system-admin', async (req: Request, res: Response) => {
+router.post('/create-system-admin', createAccountRateLimit, async (req: Request, res: Response) => {
   try {
     // Only allow in development
     if (process.env.NODE_ENV === 'production') {

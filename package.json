@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "tsx watch server/index.ts",
+    "dev:server": "JWT_SECRET=0b92b4f8bf215ac304d3661700b4c4b48458f42d4a1005e4b80d8f4866231c55d226a065a999ec2047725101b45b97ef3a06808810bf8b54877840c0f6fbb1be tsx watch server/index.ts",
     "dev:full": "concurrently \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
@@ -66,6 +66,7 @@
     "drizzle-orm": "^0.44.5",
     "embla-carousel-react": "^8.3.0",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
     "highlight.js": "^11.9.0",
     "input-otp": "^1.2.4",
     "joi": "^18.0.1",
