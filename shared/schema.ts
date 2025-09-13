@@ -180,6 +180,7 @@ export const studentProfiles = pgTable('student_profiles', {
   id: serial('id').primaryKey(),
   studentId: integer('student_id').references(() => students.id).unique(),
   name: varchar('name').notNull(),
+  email: varchar('email'), // Optional email for older children who can create their own accounts
   age: integer('age').notNull(),
   grade: varchar('grade').notNull(),
   targetExam: varchar('target_exam').notNull(),

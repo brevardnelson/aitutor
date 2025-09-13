@@ -16,6 +16,7 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
   const { addChild, selectedSubject } = useAppContext();
   const [formData, setFormData] = useState({
     name: '',
+    email: '',
     age: '',
     grade: '',
     exam: '',
@@ -42,6 +43,7 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
     if (formData.name && formData.age && formData.grade && formData.exam && formData.subjects.length > 0) {
       addChild({
         name: formData.name,
+        email: formData.email || undefined, // Only include email if provided
         age: parseInt(formData.age),
         grade: formData.grade,
         exam: formData.exam
@@ -76,6 +78,21 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
                 required
                 className="mt-1"
               />
+            </div>
+            
+            <div>
+              <Label htmlFor="childEmail">Child's Email (Optional)</Label>
+              <Input
+                id="childEmail"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="Enter child's email (for older children who can log in themselves)"
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                For older children who can create their own linked account. Leave blank if you'll manage their learning sessions.
+              </p>
             </div>
             
             <div>

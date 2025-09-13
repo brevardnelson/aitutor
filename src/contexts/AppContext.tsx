@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 interface Child {
   id: string;
   name: string;
+  email?: string; // Optional email for older children who can create their own accounts
   age: number;
   grade: string;
   exam: string;
