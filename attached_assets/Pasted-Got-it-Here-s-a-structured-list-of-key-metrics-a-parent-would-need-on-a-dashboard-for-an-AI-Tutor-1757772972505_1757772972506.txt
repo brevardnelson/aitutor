@@ -1,0 +1,59 @@
+Got it 👍 Here’s a structured list of key metrics a parent would need on a dashboard for an AI Tutor platform. I’ll break them down into core categories so you can design the dashboard logically.
+
+⸻
+
+📊 Parent Dashboard Metrics for AI Tutor Platform
+
+1. Usage & Engagement
+	•	Total Learning Time (per week/month)
+	•	Average Session Duration
+	•	Number of Sessions Completed
+	•	Days Active (engagement streaks)
+	•	Time Spent per Topic
+
+2. Progress & Curriculum Coverage
+	•	Topics Covered (e.g., Fractions, Algebra, Geometry)
+	•	Percentage of Curriculum Completed
+	•	Number of Practice Problems Attempted
+	•	Problem Completion Rate (% of problems fully attempted vs skipped)
+	•	Diagnostic Test Results (if included)
+
+3. Performance & Mastery
+	•	Accuracy Rate (% of correct answers without hints)
+	•	Improvement Over Time (trend graph of scores per topic)
+	•	Weakest Areas (topics with lowest accuracy or highest hint usage)
+	•	Strongest Areas (mastered topics)
+	•	Problem Difficulty Progression (easy → medium → hard problems solved)
+
+4. AI Tutor Interaction Metrics
+	•	Hints Requested per Session
+	•	Attempts Before Correct Answer
+	•	AI Intervention Needed (how often the tutor had to step in heavily)
+	•	Step-by-Step Engagement (whether student engaged with guiding questions vs skipping to final hint)
+
+5. Goal Tracking
+	•	Parent-Defined Goals Progress (e.g., “Master Fractions by end of month”)
+	•	Exam Readiness Indicator (overall preparedness score, based on practice & accuracy)
+	•	Milestones Reached (badges, levels, streaks, completed topics)
+
+6. Comparative Benchmarks
+	•	Performance vs Class/Grade Level (if available)
+	•	Time Spent vs Expected (based on recommended study hours)
+	•	Score Progress Compared to Last Week/Month
+
+7. Alerts & Insights
+	•	Areas Needing Attention (e.g., “Student is struggling with Word Problems”)
+	•	Engagement Drop-Off Alerts (e.g., “Hasn’t logged in for 5 days”)
+	•	Readiness Alerts (e.g., “Student is 70% ready for the exam”)
+
+⸻
+
+🖥️ Suggested Dashboard Views
+	•	Overview (snapshot): Today’s activity, time spent, progress bar toward goal.
+	•	Progress Chart: Visual line or radar chart of accuracy per topic.
+	•	Engagement Heatmap: Which days and times student practices most.
+	•	Detailed Reports: Exportable PDF/Excel for parents/teachers.
+
+⸻
+
+👉 Do you want me to sketch a visual wireframe layout of this dashboard (with charts, graphs, and KPIs placed) so you can see how it would look?
