@@ -1,9 +1,15 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq, and, or, gte, desc, isNull } from 'drizzle-orm';
+import * as schema from '../shared/schema';
 
-// Updated schema imports to match our new table structure
-const schema = {
+// Database connection and ORM setup
+const connectionString = process.env.DATABASE_URL!;
+const sql = postgres(connectionString);
+const db = drizzle(sql, { schema });
+
+// Updated schema mappings for raw SQL queries when needed
+const tableNames = {
   learningSessions: {
     id: 'id',
     studentId: 'student_id',
@@ -117,17 +123,12 @@ const schema = {
   }
 };
 
-// Database connection
-const connectionString = process.env.DATABASE_URL || '';
-
 // Simple database interface using raw SQL for better control
 export class DashboardStorage {
   private sql: postgres.Sql;
 
   constructor() {
-    this.sql = postgres(connectionString, {
-      max: 10, // Maximum number of connections
-    });
+    this.sql = sql; // Use the sql connection already defined above
   }
 
   // Learning Sessions

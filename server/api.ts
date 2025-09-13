@@ -11,8 +11,14 @@ export class DashboardAPI {
   
   // Calculate dashboard metrics server-side
   async generateDashboardSummary(childId: string, subject: string): Promise<DashboardSummary> {
-    // Convert childId to number for database queries
+    // Convert childId to number for database queries with validation
     const studentId = parseInt(childId);
+    
+    // Validate studentId to prevent database errors
+    if (isNaN(studentId) || studentId > 2147483647 || studentId < 1) {
+      console.error(`Invalid studentId: ${childId} -> ${studentId}`);
+      throw new Error(`Invalid student ID: ${childId}`);
+    }
     
     try {
       // Fetch all required data in parallel

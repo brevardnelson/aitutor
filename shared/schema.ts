@@ -1,13 +1,13 @@
-import { pgTable, serial, varchar, integer, timestamp, decimal, boolean, text, json } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, decimal, boolean, text, json, unique } from 'drizzle-orm/pg-core';
 
-// Use existing users table structure
+// Use existing users table structure - role is being deprecated in favor of user_roles
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: varchar('email').notNull().unique(),
   passwordHash: varchar('password_hash').notNull(),
   fullName: varchar('full_name').notNull(),
   phone: varchar('phone'),
-  role: varchar('role').notNull(),
+  role: varchar('role'), // Nullable for migration - use user_roles as single source of truth
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -94,7 +94,7 @@ export const topicMastery = pgTable('topic_mastery', {
 // Daily activity summary
 export const dailyActivity = pgTable('daily_activity', {
   id: serial('id').primaryKey(),
-  studentId: integer('student_id').references(() => students.id),
+  studentId: integer('student_id').references(() => students.id).notNull(),
   date: varchar('date').notNull(), // YYYY-MM-DD format
   totalTime: integer('total_time').default(0), // minutes
   sessionsCount: integer('sessions_count').default(0),
@@ -103,7 +103,10 @@ export const dailyActivity = pgTable('daily_activity', {
   problemsCompleted: integer('problems_completed').default(0),
   accuracyRate: decimal('accuracy_rate').default('0'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => ({
+  // Unique daily activity per student per date - required for upsert operations
+  uniqueStudentDate: unique().on(table.studentId, table.date),
+}));
 
 // Weekly engagement summary
 export const weeklyEngagement = pgTable('weekly_engagement', {
@@ -187,3 +190,109 @@ export const studentProfiles = pgTable('student_profiles', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+// INSTITUTIONAL SCHEMA - Multi-role platform support
+
+// Schools table - hierarchical organization
+export const schools = pgTable('schools', {
+  id: serial('id').primaryKey(),
+  name: varchar('name').notNull(),
+  address: text('address'),
+  phone: varchar('phone'),
+  email: varchar('email'),
+  adminId: integer('admin_id').references(() => users.id), // School administrator
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Classes table - grouping mechanism for students under teachers
+export const classes = pgTable('classes', {
+  id: serial('id').primaryKey(),
+  name: varchar('name').notNull(), // e.g., "Grade 7A", "Advanced Math"
+  subject: varchar('subject'), // Optional - classes can be subject-specific or general
+  gradeLevel: varchar('grade_level').notNull(),
+  schoolId: integer('school_id').references(() => schools.id).notNull(), // Classes must belong to a school
+  teacherId: integer('teacher_id').references(() => users.id), // Can be null during creation, required before activation
+  maxStudents: integer('max_students').default(30),
+  isActive: boolean('is_active').default(false), // Must be explicitly activated with teacher assigned
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique class names per school
+  uniqueClassPerSchool: unique().on(table.schoolId, table.name),
+}));
+
+// Teacher-School relationships (teachers can work at multiple schools)
+export const teacherSchools = pgTable('teacher_schools', {
+  id: serial('id').primaryKey(),
+  teacherId: integer('teacher_id').references(() => users.id).notNull(),
+  schoolId: integer('school_id').references(() => schools.id).notNull(),
+  isActive: boolean('is_active').default(true),
+  assignedAt: timestamp('assigned_at').defaultNow(),
+}, (table) => ({
+  // Prevent duplicate teacher-school assignments
+  uniqueTeacherSchool: unique().on(table.teacherId, table.schoolId),
+}));
+
+// Student-School relationships (students can only be in one active school)
+export const studentSchools = pgTable('student_schools', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  schoolId: integer('school_id').references(() => schools.id).notNull(),
+  enrolledAt: timestamp('enrolled_at').defaultNow(),
+  isActive: boolean('is_active').default(true),
+}, (table) => ({
+  // Prevent duplicate student-school enrollments
+  uniqueStudentSchool: unique().on(table.studentId, table.schoolId),
+  // Note: Single active school per student enforced at application level
+  // DB constraint: CREATE UNIQUE INDEX ux_student_active_school ON student_schools(student_id) WHERE is_active
+}));
+
+// Student-Class enrollments (students can be in multiple classes within their school)
+export const classEnrollments = pgTable('class_enrollments', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  classId: integer('class_id').references(() => classes.id).notNull(),
+  schoolId: integer('school_id').references(() => schools.id).notNull(), // Denormalized for constraint enforcement
+  enrolledAt: timestamp('enrolled_at').defaultNow(),
+  isActive: boolean('is_active').default(true),
+}, (table) => ({
+  // Prevent duplicate student-class enrollments
+  uniqueStudentClass: unique().on(table.studentId, table.classId),
+  // Ensure student belongs to same school as class (enforced at application level)
+  // Note: student_schools.school_id must equal class_enrollments.school_id for same studentId
+}));
+
+// User roles and permissions - single source of truth for roles
+export const userRoles = pgTable('user_roles', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  role: varchar('role').notNull(), // 'system_admin', 'school_admin', 'teacher', 'parent', 'student'
+  schoolId: integer('school_id').references(() => schools.id), // null for system admins only
+  permissions: json('permissions').$type<string[]>().default([]), // Optional overrides
+  isActive: boolean('is_active').default(true),
+  assignedAt: timestamp('assigned_at').defaultNow(),
+}, (table) => ({
+  // Prevent duplicate role assignments per user-school-role combination
+  uniqueUserSchoolRole: unique().on(table.userId, table.schoolId, table.role),
+}));
+
+// Invitations for users to join schools/classes
+export const invitations = pgTable('invitations', {
+  id: serial('id').primaryKey(),
+  email: varchar('email').notNull(),
+  role: varchar('role').notNull(), // 'teacher', 'parent', 'student'
+  schoolId: integer('school_id').references(() => schools.id),
+  classId: integer('class_id').references(() => classes.id), // optional, for direct class invitations
+  invitedBy: integer('invited_by').references(() => users.id).notNull(),
+  token: varchar('token').notNull().unique(), // unique invitation token
+  expiresAt: timestamp('expires_at').notNull(),
+  acceptedAt: timestamp('accepted_at'),
+  isUsed: boolean('is_used').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  // Basic uniqueness on email-role-school-class combination
+  uniqueInvitation: unique().on(table.email, table.role, table.schoolId, table.classId),
+  // Note: Active invitation constraint (not used + not expired) enforced at application level
+}));
