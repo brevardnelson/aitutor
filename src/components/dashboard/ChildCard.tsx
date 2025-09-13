@@ -16,12 +16,15 @@ interface Child {
 
 interface ChildCardProps {
   child: Child;
+  onStartLearning?: () => void;
 }
 
-const ChildCard: React.FC<ChildCardProps> = ({ child }) => {
-  const { selectChild, setView, progress } = useAppContext();
+const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning }) => {
+  const { selectChild, selectedSubject, getSubjectProgress } = useAppContext();
   
-  const childProgress = progress.filter(p => p.childId === child.id);
+  // Get progress for current subject only
+  const currentSubject = selectedSubject || 'math';
+  const childProgress = getSubjectProgress(child.id, currentSubject);
   const avgProgress = childProgress.length > 0 
     ? Math.round(childProgress.reduce((acc, p) => acc + (p.completed / p.total * 100), 0) / childProgress.length)
     : 0;
@@ -29,8 +32,10 @@ const ChildCard: React.FC<ChildCardProps> = ({ child }) => {
   const handleStartLearning = () => {
     console.log('Starting learning for child:', child.name);
     selectChild(child);
-    console.log('Setting view to tutor');
-    setView('tutor');
+    console.log('Starting learning session');
+    if (onStartLearning) {
+      onStartLearning();
+    }
   };
 
   const getExamBadgeColor = (exam: string) => {

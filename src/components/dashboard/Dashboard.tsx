@@ -6,11 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Plus, User, BookOpen, TrendingUp, LogOut } from 'lucide-react';
 import AddChildForm from './AddChildForm';
 import ChildCard from './ChildCard';
+import UnenrolledChildCard from './UnenrolledChildCard';
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onStartLearning: () => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
   const { user } = useAuth();
-  const { children, setView } = useAppContext();
+  const { children, selectedSubject, getEnrolledChildren, getUnenrolledChildren } = useAppContext();
   const [showAddChild, setShowAddChild] = React.useState(false);
+  
+  // Get subject-specific children
+  const currentSubject = selectedSubject || 'math';
+  const enrolledChildren = getEnrolledChildren(currentSubject);
+  const unenrolledChildren = getUnenrolledChildren(currentSubject);
 
   if (!user) return null;
 
@@ -26,7 +36,7 @@ const Dashboard: React.FC = () => {
           <div className="flex gap-3">
             <Button 
               variant="outline" 
-              onClick={() => setView('curriculum')}
+              disabled
               className="flex items-center gap-2"
             >
               <BookOpen className="h-4 w-4" />
@@ -82,6 +92,18 @@ const Dashboard: React.FC = () => {
           </Card>
         </div>
 
+        {/* Subject Header */}
+        <div className="mb-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900 capitalize">
+              {currentSubject} Learning Dashboard
+            </h2>
+            <p className="text-gray-600 text-sm mt-1">
+              Manage your children's progress in {currentSubject}
+            </p>
+          </div>
+        </div>
+
         {/* Children Section */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-6">
@@ -91,7 +113,7 @@ const Dashboard: React.FC = () => {
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
-              Add Child
+              Add New Child
             </Button>
           </div>
 
@@ -110,10 +132,49 @@ const Dashboard: React.FC = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {children.map(child => (
-                <ChildCard key={child.id} child={child} />
-              ))}
+            <div className="space-y-8">
+              {/* Enrolled Children */}
+              {enrolledChildren.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                    Ready to Learn {currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {enrolledChildren.map(child => (
+                      <ChildCard key={child.id} child={child} onStartLearning={onStartLearning} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Unenrolled Children */}
+              {unenrolledChildren.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                    Add to {currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {unenrolledChildren.map(child => (
+                      <UnenrolledChildCard key={child.id} child={child} subject={currentSubject} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* If no children in current subject but has children */}
+              {enrolledChildren.length === 0 && unenrolledChildren.length === 0 && (
+                <Card className="bg-white/80 backdrop-blur-sm border-dashed border-2 border-gray-300">
+                  <CardContent className="p-12 text-center">
+                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      No children in {currentSubject} yet
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      Add your existing children to {currentSubject} or create new ones
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>

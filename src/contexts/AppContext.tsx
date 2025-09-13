@@ -17,10 +17,17 @@ interface Parent {
 
 interface Progress {
   childId: string;
+  subject: string;
   topic: string;
   completed: number;
   total: number;
   lastActivity: Date;
+}
+
+interface SubjectEnrollment {
+  childId: string;
+  subject: string;
+  enrolledAt: Date;
 }
 
 interface AppContextType {
@@ -28,13 +35,19 @@ interface AppContextType {
   children: Child[];
   currentChild: Child | null;
   progress: Progress[];
-  currentView: 'auth' | 'dashboard' | 'tutor' | 'curriculum';
+  enrollments: SubjectEnrollment[];
+  selectedSubject: string | null;
   login: (parent: Parent) => void;
   logout: () => void;
   addChild: (child: Omit<Child, 'id'>) => void;
   selectChild: (child: Child) => void;
-  setView: (view: 'auth' | 'dashboard' | 'tutor' | 'curriculum') => void;
-  updateProgress: (childId: string, topic: string, completed: number, total: number) => void;
+  setSubject: (subject: string) => void;
+  clearSubject: () => void;
+  enrollChildInSubject: (childId: string, subject: string) => void;
+  getEnrolledChildren: (subject: string) => Child[];
+  getUnenrolledChildren: (subject: string) => Child[];
+  updateProgress: (childId: string, subject: string, topic: string, completed: number, total: number) => void;
+  getSubjectProgress: (childId: string, subject: string) => Progress[];
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -50,44 +63,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [childrenList, setChildrenList] = useState<Child[]>([]);
   const [currentChild, setCurrentChild] = useState<Child | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
-  const [currentView, setCurrentView] = useState<'auth' | 'dashboard' | 'tutor' | 'curriculum'>('auth');
+  const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
   const login = (parent: Parent) => {
     setCurrentUser(parent);
-    setCurrentView('dashboard');
   };
 
   const logout = () => {
     setCurrentUser(null);
     setCurrentChild(null);
-    setCurrentView('auth');
+  };
+
+  const enrollChildInSubject = (childId: string, subject: string) => {
+    setEnrollments(prev => {
+      // Check if already enrolled
+      const existing = prev.find(e => e.childId === childId && e.subject === subject);
+      if (existing) return prev;
+      
+      // Add new enrollment
+      return [...prev, {
+        childId,
+        subject,
+        enrolledAt: new Date()
+      }];
+    });
   };
 
   const addChild = (child: Omit<Child, 'id'>) => {
     const newChild = { ...child, id: Date.now().toString() };
     setChildrenList(prev => [...prev, newChild]);
+    
+    // Auto-enroll new children in selected subject or Math as default
+    const subjectToEnroll = selectedSubject || 'math';
+    enrollChildInSubject(newChild.id, subjectToEnroll);
   };
 
   const selectChild = (child: Child) => {
     setCurrentChild(child);
   };
 
-  const setView = (view: 'auth' | 'dashboard' | 'tutor' | 'curriculum') => {
-    setCurrentView(view);
+
+  const setSubject = (subject: string) => {
+    setSelectedSubject(subject);
   };
 
-  const updateProgress = (childId: string, topic: string, completed: number, total: number) => {
+  const clearSubject = () => {
+    setSelectedSubject(null);
+  };
+
+  const getEnrolledChildren = (subject: string): Child[] => {
+    const enrolledIds = enrollments
+      .filter(e => e.subject === subject)
+      .map(e => e.childId);
+    
+    return childrenList.filter(child => enrolledIds.includes(child.id));
+  };
+
+  const getUnenrolledChildren = (subject: string): Child[] => {
+    const enrolledIds = enrollments
+      .filter(e => e.subject === subject)
+      .map(e => e.childId);
+    
+    return childrenList.filter(child => !enrolledIds.includes(child.id));
+  };
+
+  const updateProgress = (childId: string, subject: string, topic: string, completed: number, total: number) => {
     setProgress(prev => {
-      const existing = prev.find(p => p.childId === childId && p.topic === topic);
+      const existing = prev.find(p => p.childId === childId && p.subject === subject && p.topic === topic);
       if (existing) {
         return prev.map(p => 
-          p.childId === childId && p.topic === topic 
+          p.childId === childId && p.subject === subject && p.topic === topic 
             ? { ...p, completed, total, lastActivity: new Date() }
             : p
         );
       }
-      return [...prev, { childId, topic, completed, total, lastActivity: new Date() }];
+      return [...prev, { childId, subject, topic, completed, total, lastActivity: new Date() }];
     });
+  };
+
+  const getSubjectProgress = (childId: string, subject: string): Progress[] => {
+    return progress.filter(p => p.childId === childId && p.subject === subject);
   };
 
   return (
@@ -96,13 +152,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       children: childrenList,
       currentChild,
       progress,
-      currentView,
+      enrollments,
+      selectedSubject,
       login,
       logout,
       addChild,
       selectChild,
-      setView,
-      updateProgress
+      setSubject,
+      clearSubject,
+      enrollChildInSubject,
+      getEnrolledChildren,
+      getUnenrolledChildren,
+      updateProgress,
+      getSubjectProgress
     }}>
       {children}
     </AppContext.Provider>
