@@ -34,16 +34,14 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
       name: 'English Language',
       description: 'Reading Comprehension, Grammar, and Writing',
       icon: <FileText className="h-8 w-8" />,
-      isActive: false,
-      comingSoon: true
+      isActive: true
     },
     {
       id: 'science',
       name: 'General Science',
       description: 'Biology, Chemistry, Physics, and Environmental Science',
       icon: <TestTube className="h-8 w-8" />,
-      isActive: false,
-      comingSoon: true
+      isActive: true
     },
     {
       id: 'social-studies',

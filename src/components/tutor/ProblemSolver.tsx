@@ -5,12 +5,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BookOpen, Target, RotateCcw } from 'lucide-react';
 import GuidedTutor from './GuidedTutor';
 import TopicDrills from './TopicDrills';
+import { type Subject } from '@/lib/ai-service';
 
 interface ProblemSolverProps {
   topic: string;
+  subject?: Subject;
 }
 
-const ProblemSolver: React.FC<ProblemSolverProps> = ({ topic }) => {
+const ProblemSolver: React.FC<ProblemSolverProps> = ({ topic, subject = 'math' }) => {
   const [activeTab, setActiveTab] = useState('guided');
   const [key, setKey] = useState(0);
 
@@ -65,6 +67,7 @@ const ProblemSolver: React.FC<ProblemSolverProps> = ({ topic }) => {
             <GuidedTutor 
               key={`guided-${key}`}
               topic={topic} 
+              subject={subject}
               onComplete={handleComplete}
               onReset={handleReset}
             />

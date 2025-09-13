@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bot, User, Lightbulb, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bot, User, Lightbulb, CheckCircle, XCircle, AlertCircle, RefreshCw, Cpu } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { StepValidator, StepValidationResult } from '@/lib/stepValidator';
 import { guidedTutorContent, TopicKey, getRandomQuestion } from './GuidedTutorContent';
+import { aiService, type Subject, type TutoringRequest } from '@/lib/ai-service';
 
 interface Message {
   id: string;
@@ -12,15 +14,18 @@ interface Message {
   content: string;
   timestamp: Date;
   validationResult?: StepValidationResult;
+  aiModel?: string;
+  aiProvider?: string;
 }
 
 interface GuidedTutorProps {
   topic: string;
+  subject?: Subject;
   onComplete: () => void;
   onReset?: () => void;
 }
 
-const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, onComplete, onReset }) => {
+const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onComplete, onReset }) => {
   const getInitialQuestion = () => {
     if (!topic) return guidedTutorContent['Fractions'].questions[0];
     
@@ -33,17 +38,56 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, onComplete, onReset })
   
   const [currentQuestion, setCurrentQuestion] = useState(() => getInitialQuestion());
   
-  const [messages, setMessages] = useState<Message[]>([{
-    id: '1',
-    type: 'ai',
-    content: `Let's work through this ${topic || 'math'} problem: ${currentQuestion.problem}\n\nWhat is the first step?`,
-    timestamp: new Date()
-  }]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const [userInput, setUserInput] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [hintsShown, setHintsShown] = useState<number[]>([]);
   const [isValidating, setIsValidating] = useState(false);
+
+  // Get model info for this subject
+  const modelInfo = aiService.getModelInfo(subject);
+
+  // Generate AI response using the multi-modal service
+  const generateAIResponse = async (userMessage: string, context?: string) => {
+    const request: TutoringRequest = {
+      subject,
+      topic,
+      userMessage,
+      context,
+      difficulty: 'intermediate'
+    };
+    
+    return await aiService.generateTutoringResponse(request);
+  };
+
+  // Initialize with AI welcome message
+  React.useEffect(() => {
+    const initializeChat = async () => {
+      try {
+        const welcomeMessage = await generateAIResponse(`Start a new ${subject} tutoring session on the topic: ${topic}. Introduce a problem and ask the student to begin.`);
+        setMessages([{
+          id: '1',
+          type: 'ai',
+          content: welcomeMessage.content,
+          timestamp: new Date(),
+          aiModel: welcomeMessage.model,
+          aiProvider: welcomeMessage.provider
+        }]);
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+        setMessages([{
+          id: '1',
+          type: 'ai',
+          content: `Let's work through this ${topic} problem step by step. I'm here to guide you through it!`,
+          timestamp: new Date()
+        }]);
+      }
+    };
+    
+    initializeChat();
+  }, [topic, subject]);
 
   const getNewQuestion = () => {
     if (!topic) return;
@@ -102,7 +146,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, onComplete, onReset })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userInput?.trim() || isValidating) return;
+    if (!userInput?.trim() || isValidating || isGeneratingResponse) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -112,6 +156,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, onComplete, onReset })
     };
     
     setMessages(prev => [...prev, userMessage]);
+    setUserInput('');
     
     if (userInput.toLowerCase().trim() === 'hint') {
       const hintMessage: Message = {
@@ -121,7 +166,6 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, onComplete, onReset })
         timestamp: new Date()
       };
       setMessages(prev => [...prev, hintMessage]);
-      setUserInput('');
       return;
     }
     

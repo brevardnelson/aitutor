@@ -95,7 +95,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
                 <h2 className="text-2xl font-bold text-gray-900">{selectedTopic}</h2>
               </div>
             </div>
-            <ProblemSolver topic={selectedTopic!} />
+            <ProblemSolver topic={selectedTopic!} subject={subject} />
           </div>
         );
       
