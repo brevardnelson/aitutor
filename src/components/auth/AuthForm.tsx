@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GraduationCap, Users, BookOpen } from 'lucide-react';
-import { authService, UserRole } from '@/lib/auth';
+import { UserRole } from '@/lib/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthFormProps {
@@ -15,6 +16,7 @@ interface AuthFormProps {
 
 const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const { toast } = useToast();
+  const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [signInData, setSignInData] = useState({
     email: '',
@@ -34,20 +36,20 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
     setIsLoading(true);
 
     try {
-      const result = await authService.signIn(signInData.email, signInData.password);
+      const result = await signIn(signInData.email, signInData.password);
       
-      if (result.error) {
+      if (!result.success) {
         toast({
           title: "Sign In Failed",
-          description: result.error,
+          description: result.error || "Unknown error",
           variant: "destructive"
         });
-      } else if (result.user) {
+      } else {
         toast({
           title: "Welcome back!",
           description: "You have successfully signed in."
         });
-        onAuthSuccess(result.user);
+        onAuthSuccess(null); // The user state will be updated by the context
       }
     } catch (error) {
       toast({
@@ -75,7 +77,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
     setIsLoading(true);
 
     try {
-      const result = await authService.signUp(
+      const result = await signUp(
         signUpData.email,
         signUpData.password,
         signUpData.fullName,
@@ -83,18 +85,18 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
         signUpData.phone || undefined
       );
       
-      if (result.error) {
+      if (!result.success) {
         toast({
           title: "Sign Up Failed",
-          description: result.error,
+          description: result.error || "Unknown error",
           variant: "destructive"
         });
-      } else if (result.user) {
+      } else {
         toast({
           title: "Account Created!",
           description: "Welcome to Caribbean AI Tutor!"
         });
-        onAuthSuccess(result.user);
+        onAuthSuccess(null); // The user state will be updated by the context
       }
     } catch (error) {
       toast({
