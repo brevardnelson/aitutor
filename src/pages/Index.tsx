@@ -7,18 +7,24 @@ import SubjectSelector from '@/components/SubjectSelector';
 import Dashboard from '@/components/dashboard/Dashboard';
 import TutorInterface from '@/components/tutor/TutorInterface';
 import { AppProvider, useAppContext } from '@/contexts/AppContext';
+import { type Subject } from '@/lib/ai-service';
 
 const Index: React.FC = () => {
   const { user, isLoading } = useAuth();
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [currentView, setCurrentView] = useState<'auth' | 'dashboard' | 'tutor' | 'curriculum'>('auth');
 
   const handleSubjectSelect = (subjectId: string) => {
     console.log('Subject selected:', subjectId);
-    setSelectedSubject(subjectId);
-    if (subjectId === 'math') {
+    const subject = subjectId as Subject;
+    setSelectedSubject(subject);
+    if (subject === 'math') {
       console.log('Setting view to dashboard');
       setCurrentView('dashboard'); // Go to existing math dashboard
+    } else {
+      // For other subjects, go directly to tutor interface
+      console.log('Setting view to tutor for subject:', subject);
+      setCurrentView('tutor');
     }
   };
 
@@ -77,7 +83,7 @@ const Index: React.FC = () => {
               case 'dashboard':
                 return <Dashboard />;
               case 'tutor':
-                return <TutorInterface />;
+                return <TutorInterface subject={selectedSubject || 'math'} />;
               case 'curriculum':
                 return (
                   <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">

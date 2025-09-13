@@ -3,12 +3,13 @@ import { useAppContext } from '@/contexts/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, BookOpen, Brain, Target, ClipboardList, Settings } from 'lucide-react';
+import { ArrowLeft, BookOpen, Brain, Target, ClipboardList, Settings, Cpu } from 'lucide-react';
 import TopicSelector from './TopicSelector';
 import ProblemSolver from './ProblemSolver';
 import PracticeTestSelector from '../practice/PracticeTestSelector';
 import PracticeTest from '../practice/PracticeTest';
 import CurriculumUpload from '../admin/CurriculumUpload';
+import { aiService, type Subject } from '@/lib/ai-service';
 
 type ViewMode = 'topics' | 'problem' | 'practice-selector' | 'practice-test' | 'admin';
 
@@ -18,11 +19,18 @@ interface TestConfig {
   problemCount: number;
 }
 
-const TutorInterface: React.FC = () => {
+interface TutorInterfaceProps {
+  subject?: Subject;
+}
+
+const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => {
   const { currentChild, setView } = useAppContext();
   const [viewMode, setViewMode] = useState<ViewMode>('topics');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [testConfig, setTestConfig] = useState<TestConfig | null>(null);
+
+  // Get AI model info for this subject
+  const modelInfo = aiService.getModelInfo(subject);
 
   if (!currentChild) {
     setView('dashboard');
@@ -50,8 +58,21 @@ const TutorInterface: React.FC = () => {
         return (
           <div>
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Choose a Math Topic</h2>
-              <p className="text-gray-600">Select a topic to start your personalized learning session</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    Choose a {subject.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())} Topic
+                  </h2>
+                  <p className="text-gray-600">Select a topic to start your personalized learning session</p>
+                </div>
+                <div className="text-right">
+                  <Badge variant="outline" className="flex items-center gap-2 text-xs">
+                    <Cpu className="h-3 w-3" />
+                    AI: {modelInfo.primaryProvider.charAt(0).toUpperCase() + modelInfo.primaryProvider.slice(1)}
+                  </Badge>
+                  <p className="text-xs text-gray-500 mt-1">Optimized for {subject}</p>
+                </div>
+              </div>
             </div>
             <TopicSelector onTopicSelect={handleTopicSelect} />
           </div>

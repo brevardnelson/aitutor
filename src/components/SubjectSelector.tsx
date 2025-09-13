@@ -2,11 +2,12 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { BookOpen, Calculator, Globe, TestTube, FileText, Brain, Lock } from 'lucide-react';
+import { BookOpen, Calculator, Globe, TestTube, FileText, Brain, Lock, Cpu } from 'lucide-react';
 import { User } from '@/lib/auth';
+import { aiService, type Subject } from '@/lib/ai-service';
 
-interface Subject {
-  id: string;
+interface SubjectInfo {
+  id: Subject;
   name: string;
   description: string;
   icon: React.ReactNode;
@@ -20,7 +21,7 @@ interface SubjectSelectorProps {
 }
 
 const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect }) => {
-  const subjects: Subject[] = [
+  const subjects: SubjectInfo[] = [
     {
       id: 'math',
       name: 'Mathematics',
@@ -62,10 +63,18 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
     }
   ];
 
-  const handleSubjectClick = (subject: Subject) => {
+  const handleSubjectClick = (subject: SubjectInfo) => {
     if (subject.isActive) {
       onSubjectSelect(subject.id);
     }
+  };
+
+  const getModelInfo = (subjectId: Subject) => {
+    const modelInfo = aiService.getModelInfo(subjectId);
+    return {
+      provider: modelInfo.primaryProvider,
+      model: modelInfo.primaryModel.replace(/^(claude-|gpt-)/, '')
+    };
   };
 
   return (
@@ -116,12 +125,23 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
               </CardHeader>
               <CardContent className="pt-0">
                 {subject.isActive ? (
-                  <Button 
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                    onClick={() => handleSubjectClick(subject)}
-                  >
-                    Start Learning
-                  </Button>
+                  <>
+                    <div className="mb-3">
+                      <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                        <Cpu className="h-3 w-3" />
+                        AI: {getModelInfo(subject.id).provider.charAt(0).toUpperCase() + getModelInfo(subject.id).provider.slice(1)}
+                      </Badge>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Optimized {getModelInfo(subject.id).model} model for {subject.name.toLowerCase()}
+                      </p>
+                    </div>
+                    <Button 
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                      onClick={() => handleSubjectClick(subject)}
+                    >
+                      Start Learning
+                    </Button>
+                  </>
                 ) : (
                   <div className="text-center">
                     <Badge variant="secondary" className="mb-2">
