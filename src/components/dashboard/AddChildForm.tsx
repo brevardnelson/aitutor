@@ -51,8 +51,9 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-md bg-white shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center p-4 z-50 overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center py-4">
+        <Card className="w-full max-w-lg bg-white shadow-2xl my-4">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Add Child</CardTitle>
@@ -174,7 +175,8 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
             </div>
           </form>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 };
