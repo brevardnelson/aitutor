@@ -24,7 +24,7 @@ interface TutorInterfaceProps {
 }
 
 const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => {
-  const { currentChild, setView } = useAppContext();
+  const { currentChild } = useAppContext();
   const [viewMode, setViewMode] = useState<ViewMode>('topics');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [testConfig, setTestConfig] = useState<TestConfig | null>(null);
@@ -33,8 +33,14 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
   const modelInfo = aiService.getModelInfo(subject);
 
   if (!currentChild) {
-    setView('dashboard');
-    return null;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">No Child Selected</h1>
+          <p className="text-gray-600">Please select a child from the dashboard to start learning.</p>
+        </div>
+      </div>
+    );
   }
 
   const handleTopicSelect = (topic: string) => {
@@ -74,7 +80,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
                 </div>
               </div>
             </div>
-            <TopicSelector onTopicSelect={handleTopicSelect} />
+            <TopicSelector onTopicSelect={handleTopicSelect} subject={subject} />
           </div>
         );
       
