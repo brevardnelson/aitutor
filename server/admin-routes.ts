@@ -19,6 +19,7 @@ const db = drizzle(sqlClient, { schema });
 // Validation schemas
 const createSchoolSchema = Joi.object({
   name: Joi.string().min(2).max(255).required(),
+  district: Joi.string().optional(),
   address: Joi.string().optional(),
   phone: Joi.string().max(50).optional(),
   email: Joi.string().email().optional(),

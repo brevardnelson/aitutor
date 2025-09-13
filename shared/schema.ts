@@ -197,10 +197,10 @@ export const studentProfiles = pgTable('student_profiles', {
 export const schools = pgTable('schools', {
   id: serial('id').primaryKey(),
   name: varchar('name').notNull(),
+  district: varchar('district'),
   address: text('address'),
   phone: varchar('phone'),
   email: varchar('email'),
-  adminId: integer('admin_id').references(() => users.id), // School administrator
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

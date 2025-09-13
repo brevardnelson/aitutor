@@ -1,0 +1,72 @@
+📊 Teacher Dashboard Metrics for this AI Tutor Platform
+
+1. Class Overview
+	•	Number of Active Students (today, this week, this month)
+	•	Average Time Spent per Student
+	•	Overall Class Accuracy Rate (average % of correct answers)
+	•	Topics Most Practiced
+	•	Class Curriculum Coverage %
+
+⸻
+
+2. Student Progress & Engagement
+	•	Individual Student Profiles with:
+	•	Time spent learning
+	•	Topics covered
+	•	Number of problems attempted vs completed
+	•	Accuracy rate
+	•	Engagement streaks (days active)
+	•	Comparison View: See which students are ahead, on track, or falling behind.
+	•	Engagement Alerts: Students who haven’t logged in recently.
+
+⸻
+
+3. Performance & Mastery
+	•	Class Mastery by Topic
+	•	% of students who have mastered each math area (Fractions, Algebra, etc.)
+	•	Heatmap showing weak vs strong topics across the class.
+	•	Student Weakness Breakdown
+	•	Which students are struggling with which topics.
+	•	Difficulty Level Progression
+	•	Are students advancing from easy → medium → hard?
+	•	Improvement Over Time
+	•	Trend lines for each student’s accuracy or scores.
+
+⸻
+
+4. AI Tutor Interaction Data
+	•	Hints Usage per Student (average and outliers)
+	•	Attempts per Problem (before success)
+	•	Most Common Errors / Misconceptions (collected across students to inform lesson plans)
+	•	AI Intervention Needed (students who rely heavily on guidance instead of independent solving).
+
+⸻
+
+5. Goal Tracking & Assessments
+	•	Teacher-Assigned Goals Progress (e.g., “Finish Geometry by midterm”).
+	•	Exam Readiness Indicators (aggregated + individual).
+	•	Diagnostic Test Results (pre-test vs post-test improvement).
+	•	Custom Assignment Completion Rates (if teacher assigns problem sets).
+
+⸻
+
+6. Comparative Benchmarks
+	•	Student vs Class Average (per topic and overall).
+	•	Class vs Grade-Level Benchmark (if available).
+	•	High Performers vs At-Risk Students (flags for enrichment vs remediation).
+
+⸻
+
+7. Actionable Insights & Alerts
+	•	Students Needing Immediate Attention (low engagement + poor performance).
+	•	Most Missed Problem Types (patterns of mistakes across class).
+	•	Recommended Grouping (students who should be paired for peer support).
+	•	Readiness Report (who is ready for the exam, who needs extra practice).
+
+⸻
+
+🖥️ Suggested Teacher Dashboard Views
+	•	Class Snapshot Panel: Quick KPIs (avg. time, accuracy, topics covered).
+	•	Heatmap View: Topics vs students (green = mastered, red = struggling).
+	•	Leaderboard / Ranking: For motivation, if gamification is used.
+	•	Drill-Down Reports: Export student or class-level reports (PDF/Excel).
