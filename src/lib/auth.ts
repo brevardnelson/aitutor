@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 export type UserRole = 'student' | 'parent' | 'teacher' | 'admin';
 
 export interface User {
@@ -17,40 +15,65 @@ export interface AuthResponse {
 }
 
 class AuthService {
+  private generateId(): number {
+    return Date.now() + Math.floor(Math.random() * 1000);
+  }
+
+  private hashPassword(password: string): string {
+    // Simple hash for demonstration - in production, use proper bcrypt
+    return btoa(password + 'salt');
+  }
+
+  private getStoredUsers(): User[] {
+    const users = localStorage.getItem('caribbeanAI_users');
+    return users ? JSON.parse(users) : [];
+  }
+
+  private saveUsers(users: User[]): void {
+    localStorage.setItem('caribbeanAI_users', JSON.stringify(users));
+  }
+
+  private getCurrentSession(): { userId: number; token: string } | null {
+    const session = localStorage.getItem('caribbeanAI_session');
+    return session ? JSON.parse(session) : null;
+  }
+
+  private saveSession(userId: number): string {
+    const token = btoa(JSON.stringify({ userId, timestamp: Date.now() }));
+    localStorage.setItem('caribbeanAI_session', JSON.stringify({ userId, token }));
+    return token;
+  }
+
+  private clearSession(): void {
+    localStorage.removeItem('caribbeanAI_session');
+  }
+
   async signUp(email: string, password: string, fullName: string, role: UserRole, phone?: string): Promise<AuthResponse> {
     try {
-      // First, create the auth user in Supabase
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role,
-            phone
-          }
-        }
-      });
-
-      if (authError) {
-        return { user: null, error: authError.message };
+      const users = this.getStoredUsers();
+      
+      // Check if user already exists
+      if (users.find(u => u.email === email)) {
+        return { user: null, error: 'An account with this email already exists' };
       }
 
-      if (!authData.user) {
-        return { user: null, error: 'Failed to create user account' };
-      }
-
-      // For now, we'll use a simpler approach without database integration
-      // TODO: Integrate with our database once we resolve the ID type mapping
-
+      // Create new user
       const user: User = {
-        id: parseInt(authData.user.id.replace(/-/g, '').substring(0, 10), 16), // Convert UUID to number for compatibility
+        id: this.generateId(),
         email,
         full_name: fullName,
         role,
         phone,
         is_active: true
       };
+
+      // Store user with hashed password
+      const userWithPassword = { ...user, password_hash: this.hashPassword(password) };
+      users.push(userWithPassword);
+      this.saveUsers(users);
+
+      // Create session
+      this.saveSession(user.id);
 
       return { user, error: null };
     } catch (error) {
@@ -60,28 +83,21 @@ class AuthService {
 
   async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const users = this.getStoredUsers();
+      const userWithPassword = users.find(u => u.email === email);
 
-      if (error) {
-        return { user: null, error: error.message };
+      if (!userWithPassword || userWithPassword.password_hash !== this.hashPassword(password)) {
+        return { user: null, error: 'Invalid email or password' };
       }
 
-      if (!data.user) {
-        return { user: null, error: 'Invalid credentials' };
+      const { password_hash, ...user } = userWithPassword;
+
+      if (!user.is_active) {
+        return { user: null, error: 'Your account has been deactivated' };
       }
 
-      // For simplicity, use auth metadata directly
-      const user: User = {
-        id: parseInt(data.user.id.replace(/-/g, '').substring(0, 10), 16), // Convert UUID to number for compatibility
-        email: data.user.email || '',
-        full_name: data.user.user_metadata?.full_name || 'User',
-        role: data.user.user_metadata?.role || 'parent',
-        phone: data.user.user_metadata?.phone,
-        is_active: true
-      };
+      // Create session
+      this.saveSession(user.id);
 
       return { user, error: null };
     } catch (error) {
@@ -91,21 +107,20 @@ class AuthService {
 
   async getCurrentUser(): Promise<User | null> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.user) {
+      const session = this.getCurrentSession();
+      if (!session) {
         return null;
       }
 
-      // For simplicity, use auth metadata directly
-      const user: User = {
-        id: parseInt(session.user.id.replace(/-/g, '').substring(0, 10), 16), // Convert UUID to number for compatibility
-        email: session.user.email || '',
-        full_name: session.user.user_metadata?.full_name || 'User',
-        role: session.user.user_metadata?.role || 'parent',
-        phone: session.user.user_metadata?.phone,
-        is_active: true
-      };
+      const users = this.getStoredUsers();
+      const userWithPassword = users.find(u => u.id === session.userId);
+      
+      if (!userWithPassword) {
+        this.clearSession();
+        return null;
+      }
+
+      const { password_hash, ...user } = userWithPassword;
       return user;
     } catch (error) {
       return null;
@@ -113,17 +128,17 @@ class AuthService {
   }
 
   async signOut(): Promise<void> {
-    await supabase.auth.signOut();
+    this.clearSession();
   }
 
   async getToken(): Promise<string | null> {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token || null;
+    const session = this.getCurrentSession();
+    return session?.token || null;
   }
 
   async isAuthenticated(): Promise<boolean> {
-    const { data: { session } } = await supabase.auth.getSession();
-    return !!session?.user;
+    const user = await this.getCurrentUser();
+    return !!user;
   }
 }
 
