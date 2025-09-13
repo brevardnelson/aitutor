@@ -1,31 +1,72 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppContext } from '@/contexts/AppContext';
-import LoginForm from './auth/LoginForm';
-import Dashboard from './dashboard/Dashboard';
-import TutorInterface from './tutor/TutorInterface';
+import { Button } from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
 
-const AppLayout: React.FC = () => {
-  const { currentView } = useAppContext();
+interface AppLayoutProps {
+  children: React.ReactNode;
+}
 
-  switch (currentView) {
-    case 'auth':
-      return <LoginForm />;
-    case 'dashboard':
-      return <Dashboard />;
-    case 'tutor':
-      return <TutorInterface />;
-    case 'curriculum':
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Curriculum Upload</h1>
-            <p className="text-gray-600">Feature coming soon...</p>
+const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
+  const { user, signOut } = useAuth();
+  const { setView } = useAppContext();
+
+  const handleSignOut = async () => {
+    await signOut();
+    setView('auth');
+  };
+
+  const handleBackToSubjects = () => {
+    setView('auth');
+  };
+
+  // Only show layout header if user is authenticated
+  if (!user) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="min-h-screen">
+      {/* Header with user info and logout */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Caribbean AI Tutor
+              </h2>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-700">
+                {user.full_name} ({user.role})
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBackToSubjects}
+              >
+                Change Subject
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
-      );
-    default:
-      return <LoginForm />;
-  }
+      </header>
+
+      {/* Main content */}
+      <main>
+        {children}
+      </main>
+    </div>
+  );
 };
 
 export default AppLayout;

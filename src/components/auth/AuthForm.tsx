@@ -197,18 +197,19 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="signup-role">Role</Label>
+                    <Label htmlFor="signup-role">I am a</Label>
                     <Select value={signUpData.role} onValueChange={(value: UserRole) => setSignUpData(prev => ({ ...prev, role: value }))}>
                       <SelectTrigger className="mt-1">
                         <SelectValue placeholder="Select your role" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="student">Student</SelectItem>
-                        <SelectItem value="parent">Parent</SelectItem>
-                        <SelectItem value="teacher">Teacher</SelectItem>
-                        <SelectItem value="admin">Administrator</SelectItem>
+                        <SelectItem value="parent">Parent/Guardian</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Teachers and administrators must be assigned by system administrators.
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="signup-phone">Phone Number (Optional)</Label>

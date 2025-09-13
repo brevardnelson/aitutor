@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, authService } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -17,7 +18,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Check initial auth state
     checkAuthState();
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setIsLoading(true);
+        try {
+          if (session?.user) {
+            // User signed in - create User object from session
+            const currentUser: User = {
+              id: parseInt(session.user.id.replace(/-/g, '').substring(0, 10), 16), 
+              email: session.user.email || '',
+              full_name: session.user.user_metadata?.full_name || 'User',
+              role: session.user.user_metadata?.role || 'parent',
+              phone: session.user.user_metadata?.phone,
+              is_active: true
+            };
+            setUser(currentUser);
+          } else {
+            // User signed out
+            setUser(null);
+          }
+        } catch (error) {
+          console.error('Error handling auth state change:', error);
+          setUser(null);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const checkAuthState = async () => {
