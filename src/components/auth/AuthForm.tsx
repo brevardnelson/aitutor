@@ -169,6 +169,25 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
                   >
                     {isLoading ? "Signing In..." : "Sign In"}
                   </Button>
+                  
+                  {/* Debug helper */}
+                  <div className="mt-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const users = JSON.parse(localStorage.getItem('caribbeanAI_users') || '[]');
+                        console.log('Current stored users:', users);
+                        if (users.length === 0) {
+                          alert('No users found in storage. Please sign up first!');
+                        } else {
+                          alert(`Found ${users.length} user(s). Email addresses: ${users.map(u => u.email).join(', ')}`);
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Debug: Check stored accounts
+                    </button>
+                  </div>
                 </form>
               </TabsContent>
               

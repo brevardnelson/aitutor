@@ -51,10 +51,11 @@ class AuthService {
   async signUp(email: string, password: string, fullName: string, role: UserRole, phone?: string): Promise<AuthResponse> {
     try {
       const users = this.getStoredUsers();
+      console.log('Attempting signup for:', email);
       
-      // Check if user already exists
-      if (users.find(u => u.email === email)) {
-        return { user: null, error: 'An account with this email already exists' };
+      // Check if user already exists (case-insensitive)
+      if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+        return { user: null, error: 'An account with this email already exists. Try signing in instead.' };
       }
 
       // Create new user
@@ -84,10 +85,22 @@ class AuthService {
   async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
       const users = this.getStoredUsers();
-      const userWithPassword = users.find(u => u.email === email);
+      console.log('Total users in system:', users.length);
+      
+      // Make email comparison case-insensitive
+      const userWithPassword = users.find(u => u.email.toLowerCase() === email.toLowerCase());
 
-      if (!userWithPassword || userWithPassword.password_hash !== this.hashPassword(password)) {
-        return { user: null, error: 'Invalid email or password' };
+      if (!userWithPassword) {
+        console.log('No user found with email:', email);
+        if (users.length === 0) {
+          return { user: null, error: 'No accounts exist yet. Please sign up first.' };
+        }
+        return { user: null, error: 'No account found with this email address. Please check your email or sign up.' };
+      }
+      
+      if (userWithPassword.password_hash !== this.hashPassword(password)) {
+        console.log('Password mismatch for user:', email);
+        return { user: null, error: 'Incorrect password. Please check your password and try again.' };
       }
 
       const { password_hash, ...user } = userWithPassword;
