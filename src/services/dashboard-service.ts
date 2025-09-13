@@ -15,6 +15,39 @@ import type {
 
 // Remove dangerous direct database import - will use API calls instead
 
+// Chart data interfaces
+export interface ProgressChartData {
+  date: string;
+  accuracy: number;
+  problemsCompleted: number;
+  timeSpent: number;
+  cumulativeProgress: number;
+}
+
+export interface TopicPerformanceData {
+  topic: string;
+  accuracy: number;
+  problemsAttempted: number;
+  problemsCompleted: number;
+  averageAttempts: number;
+  timeSpent: number;
+}
+
+export interface DifficultyDistributionData {
+  difficulty: string;
+  count: number;
+  accuracy: number;
+  color: string;
+}
+
+export interface DayActivityData {
+  date: string;
+  sessionCount: number;
+  timeSpent: number;
+  problemsCompleted: number;
+  accuracy: number;
+}
+
 export class DashboardService {
   private baseUrl = '/api'; // Server API endpoints
 
@@ -397,6 +430,153 @@ export class DashboardService {
       ],
       generatedAt: new Date()
     };
+  }
+
+  // Chart Data API Methods
+  async getProgressChartData(childId: string, subject: string, days: number = 30): Promise<ProgressChartData[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dashboard/${childId}/${subject}/progress-chart?days=${days}`);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch progress chart data:', error);
+      return this.generateSampleProgressData(days);
+    }
+  }
+
+  async getTopicPerformanceData(childId: string, subject: string): Promise<TopicPerformanceData[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dashboard/${childId}/${subject}/topic-performance`);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch topic performance data:', error);
+      return this.generateSampleTopicData();
+    }
+  }
+
+  async getDifficultyDistributionData(childId: string, subject: string): Promise<DifficultyDistributionData[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dashboard/${childId}/${subject}/difficulty-distribution`);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch difficulty distribution data:', error);
+      return this.generateSampleDifficultyData();
+    }
+  }
+
+  async getDailyActivityData(childId: string, days: number = 30): Promise<DayActivityData[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dashboard/${childId}/daily-activity?days=${days}`);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch daily activity data:', error);
+      return this.generateSampleActivityData(days);
+    }
+  }
+
+  // Sample data generators for chart components
+  private generateSampleProgressData(days: number): ProgressChartData[] {
+    const data: ProgressChartData[] = [];
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    let cumulativeProgress = 5;
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      
+      const dayActivity = Math.random() > 0.3; // 70% chance of activity
+      const problemsCompleted = dayActivity ? Math.floor(Math.random() * 10) + 1 : 0;
+      const timeSpent = dayActivity ? Math.floor(Math.random() * 60) + 15 : 0;
+      const accuracy = dayActivity ? Math.floor(Math.random() * 30) + 70 : 0;
+      
+      if (dayActivity) {
+        cumulativeProgress += Math.random() * 2;
+      }
+      
+      data.push({
+        date: date.toISOString().split('T')[0],
+        accuracy,
+        problemsCompleted,
+        timeSpent,
+        cumulativeProgress: Math.min(cumulativeProgress, 100)
+      });
+    }
+    
+    return data;
+  }
+
+  private generateSampleTopicData(): TopicPerformanceData[] {
+    const topics = ['Whole Numbers', 'Fractions', 'Decimals', 'Percentages', 'Basic Algebra', 'Word Problems', 'Geometry'];
+    
+    return topics.map(topic => {
+      const problemsAttempted = Math.floor(Math.random() * 50) + 10;
+      const problemsCompleted = Math.floor(problemsAttempted * (0.7 + Math.random() * 0.3));
+      const accuracy = Math.floor(Math.random() * 30) + 70;
+      
+      return {
+        topic,
+        accuracy,
+        problemsAttempted,
+        problemsCompleted,
+        averageAttempts: 1 + Math.random() * 2,
+        timeSpent: Math.floor(Math.random() * 300) + 60
+      };
+    });
+  }
+
+  private generateSampleDifficultyData(): DifficultyDistributionData[] {
+    return [
+      {
+        difficulty: 'easy',
+        count: Math.floor(Math.random() * 50) + 30,
+        accuracy: Math.floor(Math.random() * 20) + 80,
+        color: '#22c55e'
+      },
+      {
+        difficulty: 'medium',
+        count: Math.floor(Math.random() * 40) + 20,
+        accuracy: Math.floor(Math.random() * 25) + 65,
+        color: '#f59e0b'
+      },
+      {
+        difficulty: 'hard',
+        count: Math.floor(Math.random() * 20) + 5,
+        accuracy: Math.floor(Math.random() * 30) + 50,
+        color: '#ef4444'
+      }
+    ];
+  }
+
+  private generateSampleActivityData(days: number): DayActivityData[] {
+    const data: DayActivityData[] = [];
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      
+      const hasActivity = Math.random() > 0.25; // 75% chance of activity
+      const sessionCount = hasActivity ? Math.floor(Math.random() * 3) + 1 : 0;
+      const timeSpent = hasActivity ? Math.floor(Math.random() * 90) + 15 : 0;
+      const problemsCompleted = hasActivity ? Math.floor(Math.random() * 15) + 1 : 0;
+      const accuracy = hasActivity ? Math.floor(Math.random() * 30) + 70 : 0;
+      
+      data.push({
+        date: date.toISOString().split('T')[0],
+        sessionCount,
+        timeSpent,
+        problemsCompleted,
+        accuracy
+      });
+    }
+    
+    return data;
   }
 }
 

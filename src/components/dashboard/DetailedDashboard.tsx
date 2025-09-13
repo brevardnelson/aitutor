@@ -21,6 +21,17 @@ import {
 } from 'lucide-react';
 import { dashboardService } from '../../services/dashboard-service';
 import type { DashboardSummary } from '../../types/dashboard-metrics';
+import type { 
+  ProgressChartData, 
+  TopicPerformanceData, 
+  DifficultyDistributionData, 
+  DayActivityData 
+} from '../../services/dashboard-service';
+
+// Import chart components
+import ProgressChart from './charts/ProgressChart';
+import PerformanceChart from './charts/PerformanceChart';
+import EngagementHeatmap from './charts/EngagementHeatmap';
 
 interface DetailedDashboardProps {
   childId: string;
@@ -37,21 +48,51 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
 }) => {
   const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Chart data state
+  const [progressData, setProgressData] = useState<ProgressChartData[]>([]);
+  const [topicPerformanceData, setTopicPerformanceData] = useState<TopicPerformanceData[]>([]);
+  const [difficultyData, setDifficultyData] = useState<DifficultyDistributionData[]>([]);
+  const [activityData, setActivityData] = useState<DayActivityData[]>([]);
+  const [chartsLoading, setChartsLoading] = useState(true);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       setLoading(true);
+      setChartsLoading(true);
+      
       try {
-        // Use real data from database
+        // Load main dashboard data
         const data = await dashboardService.generateDashboardSummary(childId, subject);
         setDashboardData(data);
+        
+        // Load chart data in parallel
+        const [progressChartData, topicData, difficultyDistribution, dailyActivity] = await Promise.all([
+          dashboardService.getProgressChartData(childId, subject, 30),
+          dashboardService.getTopicPerformanceData(childId, subject),
+          dashboardService.getDifficultyDistributionData(childId, subject),
+          dashboardService.getDailyActivityData(childId, 30)
+        ]);
+        
+        setProgressData(progressChartData);
+        setTopicPerformanceData(topicData);
+        setDifficultyData(difficultyDistribution);
+        setActivityData(dailyActivity);
+        
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
         // Fallback to sample data if real data fails
         const sampleData = dashboardService.generateSampleData(childId, subject);
         setDashboardData(sampleData);
+        
+        // Load sample chart data as fallback
+        setProgressData(await dashboardService.getProgressChartData(childId, subject, 30));
+        setTopicPerformanceData(await dashboardService.getTopicPerformanceData(childId, subject));
+        setDifficultyData(await dashboardService.getDifficultyDistributionData(childId, subject));
+        setActivityData(await dashboardService.getDailyActivityData(childId, 30));
       } finally {
         setLoading(false);
+        setChartsLoading(false);
       }
     };
 
@@ -182,6 +223,56 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Interactive Charts Section */}
+        <div className="space-y-8 mb-8">
+          
+          {/* Progress Chart */}
+          {chartsLoading ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="h-80 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <ProgressChart data={progressData} />
+          )}
+          
+          {/* Performance Charts */}
+          {chartsLoading ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="h-80 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <PerformanceChart 
+              topicData={topicPerformanceData} 
+              difficultyData={difficultyData} 
+            />
+          )}
+          
+          {/* Engagement Heatmap */}
+          {chartsLoading ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="h-80 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <EngagementHeatmap 
+              data={activityData}
+              startDate={new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)}
+              endDate={new Date()}
+            />
+          )}
         </div>
 
         {/* Main Content Grid */}
