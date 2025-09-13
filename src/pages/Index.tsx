@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAppContext } from '@/contexts/AppContext';
 import AppLayout from '@/components/AppLayout';
 import AuthForm from '@/components/auth/AuthForm';
 import SubjectSelector from '@/components/SubjectSelector';
@@ -9,16 +8,22 @@ import Dashboard from '@/components/dashboard/Dashboard';
 import TutorInterface from '@/components/tutor/TutorInterface';
 import { AppProvider } from '@/contexts/AppContext';
 
-const AppContent: React.FC = () => {
+const Index: React.FC = () => {
   const { user, isLoading } = useAuth();
-  const { currentView, setView } = useAppContext();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'auth' | 'dashboard' | 'tutor' | 'curriculum'>('auth');
 
   const handleSubjectSelect = (subjectId: string) => {
     setSelectedSubject(subjectId);
     if (subjectId === 'math') {
-      setView('dashboard'); // Go to existing math dashboard
+      setCurrentView('dashboard'); // Go to existing math dashboard
     }
+  };
+
+  const handleAuthSuccess = () => {
+    // Force re-render to show subject selector
+    setCurrentView('auth');
+    setSelectedSubject(null);
   };
 
   if (isLoading) {
@@ -32,11 +37,21 @@ const AppContent: React.FC = () => {
     );
   }
 
+  const handleSignOutFromLayout = () => {
+    setCurrentView('auth');
+    setSelectedSubject(null);
+  };
+
+  const handleBackToSubjects = () => {
+    setCurrentView('auth');
+    setSelectedSubject(null);
+  };
+
   // If not authenticated, show auth form
   if (!user) {
     return (
       <AppLayout>
-        <AuthForm onAuthSuccess={() => setView('auth')} />
+        <AuthForm onAuthSuccess={handleAuthSuccess} />
       </AppLayout>
     );
   }
@@ -44,7 +59,7 @@ const AppContent: React.FC = () => {
   // If authenticated but no subject selected, show subject selector
   if (!selectedSubject && currentView === 'auth') {
     return (
-      <AppLayout>
+      <AppLayout onSignOut={handleSignOutFromLayout}>
         <SubjectSelector user={user} onSubjectSelect={handleSubjectSelect} />
       </AppLayout>
     );
@@ -52,34 +67,28 @@ const AppContent: React.FC = () => {
 
   // Show subject content based on current view
   return (
-    <AppLayout>
-      {(() => {
-        switch (currentView) {
-          case 'dashboard':
-            return <Dashboard />;
-          case 'tutor':
-            return <TutorInterface />;
-          case 'curriculum':
-            return (
-              <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
-                <div className="text-center">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-4">Curriculum Upload</h1>
-                  <p className="text-gray-600">Feature coming soon...</p>
-                </div>
-              </div>
-            );
-          default:
-            return <SubjectSelector user={user} onSubjectSelect={handleSubjectSelect} />;
-        }
-      })()} 
-    </AppLayout>
-  );
-};
-
-const Index: React.FC = () => {
-  return (
     <AppProvider>
-      <AppContent />
+      <AppLayout onSignOut={handleSignOutFromLayout} onBackToSubjects={handleBackToSubjects}>
+        {(() => {
+          switch (currentView) {
+            case 'dashboard':
+              return <Dashboard />;
+            case 'tutor':
+              return <TutorInterface />;
+            case 'curriculum':
+              return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+                  <div className="text-center">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-4">Curriculum Upload</h1>
+                    <p className="text-gray-600">Feature coming soon...</p>
+                  </div>
+                </div>
+              );
+            default:
+              return <SubjectSelector user={user} onSubjectSelect={handleSubjectSelect} />;
+          }
+        })()} 
+      </AppLayout>
     </AppProvider>
   );
 };

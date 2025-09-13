@@ -24,12 +24,12 @@ class AuthService {
     return btoa(password + 'salt');
   }
 
-  private getStoredUsers(): User[] {
+  private getStoredUsers(): any[] {
     const users = localStorage.getItem('caribbeanAI_users');
     return users ? JSON.parse(users) : [];
   }
 
-  private saveUsers(users: User[]): void {
+  private saveUsers(users: any[]): void {
     localStorage.setItem('caribbeanAI_users', JSON.stringify(users));
   }
 

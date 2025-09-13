@@ -1,24 +1,24 @@
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAppContext } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
+  onSignOut?: () => void;
+  onBackToSubjects?: () => void;
 }
 
-const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
+const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubjects }) => {
   const { user, signOut } = useAuth();
-  const { setView } = useAppContext();
 
   const handleSignOut = async () => {
     await signOut();
-    setView('auth');
+    if (onSignOut) onSignOut();
   };
 
   const handleBackToSubjects = () => {
-    setView('auth');
+    if (onBackToSubjects) onBackToSubjects();
   };
 
   // Only show layout header if user is authenticated
