@@ -4,31 +4,48 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAppContext } from '@/contexts/AppContext';
-import { X } from 'lucide-react';
+import { X, Calculator, BookOpen, Beaker } from 'lucide-react';
 
 interface AddChildFormProps {
   onClose: () => void;
 }
 
 const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
-  const { addChild } = useAppContext();
+  const { addChild, selectedSubject } = useAppContext();
   const [formData, setFormData] = useState({
     name: '',
     age: '',
     grade: '',
-    exam: ''
+    exam: '',
+    subjects: [selectedSubject || 'math'] // Start with current subject selected
   });
+  
+  const availableSubjects = [
+    { id: 'math', name: 'Math', icon: Calculator, description: 'Numbers, algebra, geometry' },
+    { id: 'english', name: 'English', icon: BookOpen, description: 'Reading, writing, grammar' },
+    { id: 'science', name: 'Science', icon: Beaker, description: 'Biology, chemistry, physics' }
+  ];
+
+  const handleSubjectToggle = (subjectId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      subjects: prev.subjects.includes(subjectId)
+        ? prev.subjects.filter(s => s !== subjectId)
+        : [...prev.subjects, subjectId]
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.name && formData.age && formData.grade && formData.exam) {
+    if (formData.name && formData.age && formData.grade && formData.exam && formData.subjects.length > 0) {
       addChild({
         name: formData.name,
         age: parseInt(formData.age),
         grade: formData.grade,
         exam: formData.exam
-      });
+      }, formData.subjects); // Pass subjects to addChild
       onClose();
     }
   };
@@ -111,6 +128,37 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            
+            <div>
+              <Label>Subjects to Enroll</Label>
+              <p className="text-sm text-gray-600 mb-3">Select which subjects this child will study</p>
+              <div className="grid grid-cols-1 gap-3">
+                {availableSubjects.map((subject) => {
+                  const IconComponent = subject.icon;
+                  return (
+                    <div key={subject.id} className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-gray-50">
+                      <Checkbox
+                        id={subject.id}
+                        checked={formData.subjects.includes(subject.id)}
+                        onCheckedChange={() => handleSubjectToggle(subject.id)}
+                      />
+                      <div className="flex items-center gap-2 flex-1">
+                        <IconComponent className="h-4 w-4 text-gray-600" />
+                        <div className="flex-1">
+                          <label htmlFor={subject.id} className="text-sm font-medium cursor-pointer">
+                            {subject.name}
+                          </label>
+                          <p className="text-xs text-gray-500">{subject.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {formData.subjects.length === 0 && (
+                <p className="text-sm text-red-600 mt-2">Please select at least one subject</p>
+              )}
             </div>
             
             <div className="flex gap-3 pt-4">

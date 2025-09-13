@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface Child {
   id: string;
@@ -39,7 +39,7 @@ interface AppContextType {
   selectedSubject: string | null;
   login: (parent: Parent) => void;
   logout: () => void;
-  addChild: (child: Omit<Child, 'id'>) => void;
+  addChild: (child: Omit<Child, 'id'>, subjects?: string[]) => void;
   selectChild: (child: Child) => void;
   setSubject: (subject: string) => void;
   clearSubject: () => void;
@@ -58,13 +58,53 @@ export const useAppContext = () => {
   return context;
 };
 
+// Helper functions for localStorage persistence
+const loadFromStorage = (key: string, defaultValue: any): any => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.error(`Error loading ${key} from localStorage:`, error);
+    return defaultValue;
+  }
+};
+
+const saveToStorage = (key: string, value: any): void => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Error saving ${key} to localStorage:`, error);
+  }
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<Parent | null>(null);
-  const [childrenList, setChildrenList] = useState<Child[]>([]);
+  const [childrenList, setChildrenList] = useState<Child[]>(() => 
+    loadFromStorage('caribbean_ai_children', [])
+  );
   const [currentChild, setCurrentChild] = useState<Child | null>(null);
-  const [progress, setProgress] = useState<Progress[]>([]);
-  const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>([]);
+  const [progress, setProgress] = useState<Progress[]>(() => 
+    loadFromStorage('caribbean_ai_progress', [])
+  );
+  const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>(() => 
+    loadFromStorage('caribbean_ai_enrollments', [])
+  );
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+
+  // Persist children list to localStorage whenever it changes
+  useEffect(() => {
+    saveToStorage('caribbean_ai_children', childrenList);
+  }, [childrenList]);
+
+  // Persist enrollments to localStorage whenever they change
+  useEffect(() => {
+    saveToStorage('caribbean_ai_enrollments', enrollments);
+  }, [enrollments]);
+
+  // Persist progress to localStorage whenever it changes
+  useEffect(() => {
+    saveToStorage('caribbean_ai_progress', progress);
+  }, [progress]);
 
   const login = (parent: Parent) => {
     setCurrentUser(parent);
@@ -90,13 +130,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const addChild = (child: Omit<Child, 'id'>) => {
+  const addChild = (child: Omit<Child, 'id'>, subjects?: string[]) => {
     const newChild = { ...child, id: Date.now().toString() };
     setChildrenList(prev => [...prev, newChild]);
     
-    // Auto-enroll new children in selected subject or Math as default
-    const subjectToEnroll = selectedSubject || 'math';
-    enrollChildInSubject(newChild.id, subjectToEnroll);
+    // Enroll child in specified subjects or current subject as default
+    const subjectsToEnroll = subjects && subjects.length > 0 ? subjects : [selectedSubject || 'math'];
+    subjectsToEnroll.forEach(subject => {
+      enrollChildInSubject(newChild.id, subject);
+    });
   };
 
   const selectChild = (child: Child) => {
