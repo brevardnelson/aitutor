@@ -14,8 +14,10 @@ const Index: React.FC = () => {
   const [currentView, setCurrentView] = useState<'auth' | 'dashboard' | 'tutor' | 'curriculum'>('auth');
 
   const handleSubjectSelect = (subjectId: string) => {
+    console.log('Subject selected:', subjectId);
     setSelectedSubject(subjectId);
     if (subjectId === 'math') {
+      console.log('Setting view to dashboard');
       setCurrentView('dashboard'); // Go to existing math dashboard
     }
   };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppContext } from '@/contexts/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,10 +8,11 @@ import AddChildForm from './AddChildForm';
 import ChildCard from './ChildCard';
 
 const Dashboard: React.FC = () => {
-  const { currentUser, children, logout, setView } = useAppContext();
+  const { user } = useAuth();
+  const { children, setView } = useAppContext();
   const [showAddChild, setShowAddChild] = React.useState(false);
 
-  if (!currentUser) return null;
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -18,7 +20,7 @@ const Dashboard: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {currentUser.name}!</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user.full_name}!</h1>
             <p className="text-gray-600 mt-1">Manage your children's learning journey</p>
           </div>
           <div className="flex gap-3">
@@ -32,7 +34,7 @@ const Dashboard: React.FC = () => {
             </Button>
             <Button 
               variant="outline" 
-              onClick={logout}
+              onClick={() => window.location.reload()} // Simple logout for now
               className="flex items-center gap-2"
             >
               <LogOut className="h-4 w-4" />
