@@ -343,7 +343,7 @@ router.get('/class/:classId/students', authenticateToken, requireTeacherOrAbove,
           const activityDate = sortedActivity[i].date;
           const expectedDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           
-          if (activityDate === expectedDate && sortedActivity[i].totalTime > 0) {
+          if (activityDate === expectedDate && (sortedActivity[i].totalTime || 0) > 0) {
             engagementStreak++;
           } else {
             break;
@@ -390,6 +390,334 @@ router.get('/class/:classId/students', authenticateToken, requireTeacherOrAbove,
   } catch (error) {
     console.error('Get student progress error:', error);
     res.status(500).json({ error: 'Failed to fetch student progress' });
+  }
+});
+
+// XP System Constants (matching gamification-routes.ts)
+const XP_CONSTANTS = {
+  LEVEL_THRESHOLDS: [0, 100, 250, 500, 1000, 2000, 4000, 8000, 15000, 30000]
+};
+
+// Helper function to calculate XP needed for next level
+function calculateXPToNextLevel(totalXP: number, currentLevel: number): number {
+  if (currentLevel >= XP_CONSTANTS.LEVEL_THRESHOLDS.length) {
+    return 0; // Max level reached
+  }
+  const nextLevelThreshold = XP_CONSTANTS.LEVEL_THRESHOLDS[currentLevel];
+  return Math.max(0, nextLevelThreshold - totalXP);
+}
+
+// GET /api/teacher/class/:classId/gamification - Get comprehensive gamification data for a class
+router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAbove, async (req: Request, res: Response) => {
+  try {
+    const classId = parseInt(req.params.classId);
+    
+    if (!classId) {
+      return res.status(400).json({ error: 'Invalid class ID' });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // First check if user has access to this class
+    const classAccess = await db.select({
+      id: schema.classes.id,
+      name: schema.classes.name,
+      subject: schema.classes.subject,
+      gradeLevel: schema.classes.gradeLevel
+    })
+    .from(schema.classes)
+    .where(
+      and(
+        eq(schema.classes.id, classId),
+        eq(schema.classes.teacherId, req.user.id),
+        eq(schema.classes.isActive, true)
+      )
+    )
+    .limit(1);
+
+    if (classAccess.length === 0) {
+      return res.status(403).json({ error: 'Access denied - not your class' });
+    }
+
+    const classInfo = classAccess[0];
+
+    // Get all students in this class with their gamification data
+    const studentsWithGamification = await db.select({
+      studentId: schema.students.id,
+      studentName: sql<string>`COALESCE(${schema.studentProfiles.name}, 'Student ' || ${schema.students.id})`,
+      totalXP: sql<number>`COALESCE(${schema.studentXP.totalXP}, 0)`,
+      currentLevel: sql<number>`COALESCE(${schema.studentXP.level}, 1)`,
+      weeklyXP: sql<number>`COALESCE(${schema.studentXP.weeklyXP}, 0)`,
+      badgeCount: sql<number>`COALESCE(badge_count.count, 0)`,
+      // Use real activity timestamp instead of createdAt
+      lastActive: sql<string>`COALESCE(activity_data.last_active, ${schema.students.createdAt})`,
+      // Challenge data
+      activeChallenges: sql<number>`COALESCE(challenge_stats.active_challenges, 0)`,
+      completedChallenges: sql<number>`COALESCE(challenge_stats.completed_challenges, 0)`,
+      challengeProgress: sql<number>`COALESCE(challenge_stats.avg_progress, 0)`,
+      currentStreak: sql<number>`COALESCE(streak_data.current_streak, 0)`
+    })
+    .from(schema.classEnrollments)
+    .innerJoin(schema.students, eq(schema.classEnrollments.studentId, schema.students.id))
+    .leftJoin(schema.studentProfiles, eq(schema.students.id, schema.studentProfiles.studentId))
+    .leftJoin(schema.studentXP, eq(schema.students.id, schema.studentXP.studentId))
+    .leftJoin(
+      sql`(
+        SELECT student_id, COUNT(*) as count 
+        FROM student_badges 
+        WHERE earned_at IS NOT NULL 
+        GROUP BY student_id
+      ) badge_count`,
+      sql`badge_count.student_id = ${schema.students.id}`
+    )
+    .leftJoin(
+      sql`(
+        SELECT 
+          student_id,
+          COUNT(*) FILTER (WHERE is_completed = false AND end_date > NOW()) as active_challenges,
+          COUNT(*) FILTER (WHERE is_completed = true) as completed_challenges,
+          COALESCE(AVG(CASE WHEN target_value > 0 THEN (current_value::float / target_value * 100) ELSE 0 END), 0) as avg_progress
+        FROM challenge_participation cp
+        JOIN challenges c ON cp.challenge_id = c.id
+        WHERE c.is_active = true
+        GROUP BY student_id
+      ) challenge_stats`,
+      sql`challenge_stats.student_id = ${schema.students.id}`
+    )
+    .leftJoin(
+      sql`(
+        SELECT 
+          student_id,
+          COUNT(*) as current_streak
+        FROM daily_activity 
+        WHERE date >= (CURRENT_DATE - INTERVAL '7 days')::text 
+          AND total_time > 0
+        GROUP BY student_id
+      ) streak_data`,
+      sql`streak_data.student_id = ${schema.students.id}`
+    )
+    .leftJoin(
+      sql`(
+        SELECT 
+          student_id,
+          MAX(date) as last_active
+        FROM daily_activity
+        WHERE total_time > 0
+        GROUP BY student_id
+      ) activity_data`,
+      sql`activity_data.student_id = ${schema.students.id}`
+    )
+    .where(
+      and(
+        eq(schema.classEnrollments.classId, classId),
+        eq(schema.classEnrollments.isActive, true)
+      )
+    )
+    .orderBy(sql`COALESCE(${schema.studentXP.totalXP}, 0) DESC`);
+
+    // Calculate class summary statistics
+    const totalStudents = studentsWithGamification.length;
+    const averageXP = totalStudents > 0 ? 
+      studentsWithGamification.reduce((sum, s) => sum + (s.totalXP || 0), 0) / totalStudents : 0;
+    const totalBadgesEarned = studentsWithGamification.reduce((sum, s) => sum + (s.badgeCount || 0), 0);
+    const activeStudents = studentsWithGamification.filter(s => s.weeklyXP > 0).length;
+    const studentsInChallenges = studentsWithGamification.filter(s => s.activeChallenges > 0).length;
+    const challengeParticipation = totalStudents > 0 ? (studentsInChallenges / totalStudents) * 100 : 0;
+
+    // Get top performers (top 5 by XP)
+    const topPerformers = studentsWithGamification
+      .slice(0, 5)
+      .map(s => ({
+        studentId: s.studentId,
+        studentName: s.studentName,
+        xp: s.totalXP || 0,
+        badges: s.badgeCount || 0,
+        level: s.currentLevel || 1
+      }));
+
+    // Identify students needing attention with comprehensive reasons
+    const needsAttention: Array<{studentId: number, studentName: string, reasons: string[]}> = studentsWithGamification
+      .map(s => {
+        const reasons: string[] = [];
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+        
+        // XP and engagement analysis
+        if ((s.weeklyXP || 0) < 50) {
+          reasons.push('Low weekly XP (less than 50 points)');
+        }
+        if ((s.totalXP || 0) < 100 && new Date(s.lastActive) < weekAgo) {
+          reasons.push('New student with low engagement');
+        }
+        
+        // Badge and achievement analysis
+        if ((s.badgeCount || 0) === 0 && (s.totalXP || 0) > 200) {
+          reasons.push('Has XP but no badges earned');
+        }
+        
+        // Activity and participation analysis
+        if (!s.lastActive || new Date(s.lastActive) < weekAgo) {
+          if (!s.lastActive || new Date(s.lastActive) < twoWeeksAgo) {
+            reasons.push('Inactive for over 2 weeks');
+          } else {
+            reasons.push('Inactive for over a week');
+          }
+        }
+        
+        // Challenge participation analysis
+        if ((s.activeChallenges || 0) === 0 && (s.completedChallenges || 0) === 0) {
+          reasons.push('No challenge participation');
+        } else if ((s.challengeProgress || 0) < 25 && (s.activeChallenges || 0) > 0) {
+          reasons.push('Started challenges but low progress');
+        }
+        
+        // Streak and consistency analysis
+        if ((s.currentStreak || 0) === 0) {
+          reasons.push('No recent daily activity streak');
+        }
+        
+        // Performance level analysis
+        if ((s.currentLevel || 1) === 1 && (s.totalXP || 0) > 80) {
+          reasons.push('Close to level up but hasn\'t progressed');
+        }
+        
+        return {
+          studentId: s.studentId,
+          studentName: s.studentName,
+          reasons: reasons
+        };
+      })
+      .filter(s => s.reasons.length >= 2) // Only include students with multiple concerns
+      .sort((a, b) => b.reasons.length - a.reasons.length) // Sort by number of concerns
+      .slice(0, 8); // Limit to top 8 students needing most attention
+
+    // Get current class leaderboard
+    const leaderboardQuery = await db.select({
+      id: schema.leaderboards.id,
+      type: schema.leaderboards.type,
+      periodStart: schema.leaderboards.periodStart,
+      periodEnd: schema.leaderboards.periodEnd
+    })
+    .from(schema.leaderboards)
+    .where(
+      and(
+        eq(schema.leaderboards.scope, 'class'),
+        eq(schema.leaderboards.classId, classId),
+        eq(schema.leaderboards.type, 'weekly_xp'),
+        eq(schema.leaderboards.isCurrent, true)
+      )
+    )
+    .limit(1);
+
+    let leaderboardEntries: Array<{rank: number, studentId: number, studentName: string, currentValue: number, trendDirection: string | null}> = [];
+    if (leaderboardQuery.length > 0) {
+      const leaderboardId = leaderboardQuery[0].id;
+      
+      leaderboardEntries = await db.select({
+        rank: schema.leaderboardEntries.rank,
+        studentId: schema.leaderboardEntries.studentId,
+        studentName: sql<string>`COALESCE(${schema.studentProfiles.name}, 'Unknown Student')`,
+        currentValue: schema.leaderboardEntries.score,
+        trendDirection: schema.leaderboardEntries.trendDirection
+      })
+      .from(schema.leaderboardEntries)
+      .leftJoin(schema.students, eq(schema.leaderboardEntries.studentId, schema.students.id))
+      .leftJoin(schema.studentProfiles, eq(schema.students.id, schema.studentProfiles.studentId))
+      .where(eq(schema.leaderboardEntries.leaderboardId, leaderboardId))
+      .orderBy(asc(schema.leaderboardEntries.rank))
+      .limit(10);
+    }
+
+    res.json({
+      success: true,
+      classInfo: {
+        id: classInfo.id,
+        name: classInfo.name,
+        subject: classInfo.subject,
+        gradeLevel: classInfo.gradeLevel
+      },
+      summary: {
+        totalStudents,
+        averageXP: Math.round(averageXP),
+        totalBadgesEarned,
+        challengeParticipation: Math.round(challengeParticipation),
+        activeStudents
+      },
+      topPerformers,
+      needsAttention,
+      leaderboard: {
+        entries: leaderboardEntries,
+        period: leaderboardQuery.length > 0 ? {
+          start: leaderboardQuery[0].periodStart,
+          end: leaderboardQuery[0].periodEnd
+        } : null
+      },
+      students: await Promise.all(studentsWithGamification.map(async s => {
+        // Calculate proper xpToNextLevel
+        const totalXP = s.totalXP || 0;
+        const currentLevel = s.currentLevel || 1;
+        const xpToNextLevel = calculateXPToNextLevel(totalXP, currentLevel);
+
+        // Fetch recent badges for this student
+        const recentBadges = await db.select({
+          id: schema.studentBadges.id,
+          name: schema.badgeDefinitions.name,
+          category: schema.badgeDefinitions.category,
+          earnedAt: schema.studentBadges.earnedAt
+        })
+        .from(schema.studentBadges)
+        .innerJoin(schema.badgeDefinitions, eq(schema.studentBadges.badgeId, schema.badgeDefinitions.id))
+        .where(
+          and(
+            eq(schema.studentBadges.studentId, s.studentId),
+            eq(schema.studentBadges.isEarned, true),
+            isNotNull(schema.studentBadges.earnedAt)
+          )
+        )
+        .orderBy(desc(schema.studentBadges.earnedAt))
+        .limit(5);
+
+        // Calculate leaderboard positions
+        const leaderboardRank = leaderboardEntries.findIndex(entry => entry.studentId === s.studentId) + 1;
+
+        return {
+          studentId: s.studentId,
+          studentName: s.studentName,
+          xp: {
+            totalXP: totalXP,
+            currentLevel: currentLevel,
+            weeklyXP: s.weeklyXP || 0,
+            xpToNextLevel: xpToNextLevel
+          },
+          badges: {
+            totalBadges: s.badgeCount || 0,
+            recentBadges: recentBadges.map(badge => ({
+              id: badge.id,
+              name: badge.name,
+              category: badge.category,
+              earnedAt: badge.earnedAt?.toISOString() || ''
+            }))
+          },
+          challenges: {
+            weeklyProgress: Math.round(s.challengeProgress || 0),
+            completedChallenges: s.completedChallenges || 0,
+            currentStreak: s.currentStreak || 0
+          },
+          leaderboardPosition: {
+            weeklyXPRank: leaderboardRank || 0,
+            badgeCountRank: 0, // Could be enhanced with badge-based leaderboard
+            challengeRank: 0   // Could be enhanced with challenge-based leaderboard
+          },
+          lastActive: s.lastActive
+        };
+      }))
+    });
+
+  } catch (error) {
+    console.error('Get class gamification data error:', error);
+    res.status(500).json({ error: 'Failed to fetch gamification data' });
   }
 });
 

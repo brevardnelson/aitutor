@@ -21,6 +21,7 @@ import {
 import { ClassOverview } from './ClassOverview';
 import { StudentProgress } from './StudentProgress'; 
 import { PerformanceAnalytics } from './PerformanceAnalytics';
+import { GamificationDashboard } from './GamificationDashboard';
 import { teacherAPI, TeacherClass } from '@/lib/teacher-api';
 
 export const TeacherDashboard: React.FC = () => {
@@ -169,7 +170,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {selectedClass && (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="overview" className="flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
                     Class Overview
@@ -183,6 +184,11 @@ export const TeacherDashboard: React.FC = () => {
                   <TabsTrigger value="analytics" className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
                     Performance Analytics
+                  </TabsTrigger>
+
+                  <TabsTrigger value="gamification" className="flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    Gamification
                   </TabsTrigger>
                 </TabsList>
 
@@ -199,6 +205,11 @@ export const TeacherDashboard: React.FC = () => {
                 {/* Performance Analytics Tab */}
                 <TabsContent value="analytics">
                   <PerformanceAnalytics classId={selectedClass.id} />
+                </TabsContent>
+
+                {/* Gamification Tab */}
+                <TabsContent value="gamification">
+                  <GamificationDashboard classId={selectedClass.id} />
                 </TabsContent>
               </Tabs>
             )}
