@@ -125,5 +125,8 @@ export const requireSchoolAdmin = requireRole(['system_admin', 'school_admin']);
 // Teacher or above middleware
 export const requireTeacherOrAbove = requireRole(['system_admin', 'school_admin', 'teacher']);
 
+// Parent or above middleware
+export const requireParentOrAbove = requireRole(['system_admin', 'school_admin', 'teacher', 'parent']);
+
 // Alias for backward compatibility
 export const isAuthenticated = authenticateToken;

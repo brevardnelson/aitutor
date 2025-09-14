@@ -19,6 +19,9 @@ const recommendationService = new RedemptionRecommendationService();
 router.get('/notifications', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
     
     const notifications = await db.select({
       id: schema.gamificationNotifications.id,
@@ -59,6 +62,9 @@ router.get('/notifications', authenticateToken, requireParentOrAbove, async (req
 router.post('/notifications/:id/read', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
     const notificationId = parseInt(req.params.id);
 
     await db.update(schema.gamificationNotifications)
@@ -81,27 +87,67 @@ router.post('/notifications/:id/read', authenticateToken, requireParentOrAbove, 
   }
 });
 
-// Get parent badges
-router.get('/badges/:studentId?', authenticateToken, requireParentOrAbove, async (req, res) => {
+// Get all parent badges  
+router.get('/badges', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
-    const studentId = req.params.studentId ? parseInt(req.params.studentId) : undefined;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
+
+    const badges = await badgeService.getParentBadges(userId);
+    
+    // Get engagement summary
+    const engagement = await db.select({
+      studentName: schema.studentProfiles.name,
+      engagementScore: schema.parentEngagement.engagementScore,
+      engagementLevel: schema.parentEngagement.engagementLevel,
+      totalLogins: schema.parentEngagement.totalLogins,
+      weeklyLogins: schema.parentEngagement.weeklyLogins
+    })
+    .from(schema.parentEngagement)
+    .leftJoin(schema.students, eq(schema.parentEngagement.studentId, schema.students.id))
+    .leftJoin(schema.studentProfiles, eq(schema.students.id, schema.studentProfiles.studentId))
+    .where(eq(schema.parentEngagement.parentId, userId));
+
+    res.json({
+      badges,
+      engagement,
+      totalBadges: badges.length,
+      badgesByType: badges.reduce((acc, badge) => {
+        acc[badge.type] = (acc[badge.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    });
+
+  } catch (error) {
+    console.error('Get parent badges error:', error);
+    res.status(500).json({ error: 'Failed to fetch parent badges' });
+  }
+});
+
+// Get parent badges for specific student
+router.get('/badges/:studentId', authenticateToken, requireParentOrAbove, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
+    const studentId = parseInt(req.params.studentId);
 
     // Verify parent owns the student
-    if (studentId) {
-      const student = await db.select()
-        .from(schema.students)
-        .where(
-          and(
-            eq(schema.students.id, studentId),
-            eq(schema.students.parentId, userId)
-          )
+    const student = await db.select()
+      .from(schema.students)
+      .where(
+        and(
+          eq(schema.students.id, studentId),
+          eq(schema.students.parentId, userId)
         )
-        .limit(1);
+      )
+      .limit(1);
 
-      if (!student[0]) {
-        return res.status(403).json({ error: 'Access denied to student data' });
-      }
+    if (!student[0]) {
+      return res.status(403).json({ error: 'Access denied to student data' });
     }
 
     const badges = await badgeService.getParentBadges(userId, studentId);
@@ -139,6 +185,9 @@ router.get('/badges/:studentId?', authenticateToken, requireParentOrAbove, async
 router.get('/recommendations/:studentId', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
     const studentId = parseInt(req.params.studentId);
 
     // Verify parent owns the student
@@ -190,6 +239,9 @@ router.get('/recommendations/:studentId', authenticateToken, requireParentOrAbov
 router.post('/recommendations/:studentId/track', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
     const studentId = parseInt(req.params.studentId);
     const { recommendationId, chosen } = req.body;
 
@@ -222,6 +274,9 @@ router.post('/recommendations/:studentId/track', authenticateToken, requireParen
 router.post('/test-notification/:studentId', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
     const studentId = parseInt(req.params.studentId);
     const { type = 'badge_earned' } = req.body;
 
@@ -260,6 +315,9 @@ router.post('/test-notification/:studentId', authenticateToken, requireParentOrA
 router.get('/engagement', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
 
     const engagement = await db.select({
       studentId: schema.parentEngagement.studentId,

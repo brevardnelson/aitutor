@@ -3,11 +3,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppContext } from '@/contexts/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, User, BookOpen, TrendingUp, LogOut } from 'lucide-react';
+import { Plus, User, BookOpen, TrendingUp, LogOut, Trophy, Bell } from 'lucide-react';
 import AddChildForm from './AddChildForm';
 import ChildCard from './ChildCard';
 import UnenrolledChildCard from './UnenrolledChildCard';
 import DetailedDashboard from './DetailedDashboard';
+import ParentNotifications from '../parent/ParentNotifications';
+import ParentBadges from '../parent/ParentBadges';
+import RedemptionRecommendations from '../parent/RedemptionRecommendations';
 
 interface DashboardProps {
   onStartLearning: () => void;
@@ -19,6 +22,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
   const [showAddChild, setShowAddChild] = React.useState(false);
   const [showDetailedDashboard, setShowDetailedDashboard] = React.useState(false);
   const [selectedChildForAnalytics, setSelectedChildForAnalytics] = React.useState<{id: string, name: string} | null>(null);
+  const [activeTab, setActiveTab] = React.useState<'children' | 'gamification'>('children');
   
   // Get subject-specific children
   const currentSubject = selectedSubject || 'math';
@@ -117,97 +121,176 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
           </Card>
         </div>
 
-        {/* Subject Header */}
-        <div className="mb-6">
-          <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900 capitalize">
-              {currentSubject} Learning Dashboard
-            </h2>
-            <p className="text-gray-600 text-sm mt-1">
-              Manage your children's progress in {currentSubject}
-            </p>
+        {/* Tab Navigation */}
+        <div className="mb-8">
+          <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
+            <button
+              onClick={() => setActiveTab('children')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                activeTab === 'children'
+                  ? 'bg-blue-100 text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <User className="h-4 w-4" />
+              My Children
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('gamification')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                activeTab === 'gamification'
+                  ? 'bg-blue-100 text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Trophy className="h-4 w-4" />
+              Achievement Center
+            </button>
           </div>
         </div>
 
-        {/* Children Section */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Your Children</h2>
-            <Button 
-              onClick={() => setShowAddChild(true)}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add New Child
-            </Button>
-          </div>
+        {/* Tab Content */}
+        {activeTab === 'children' ? (
+          <div>
+            {/* Subject Header */}
+            <div className="mb-6">
+              <div className="bg-white/80 backdrop-blur-sm rounded-lg p-4 border border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900 capitalize">
+                  {currentSubject} Learning Dashboard
+                </h2>
+                <p className="text-gray-600 text-sm mt-1">
+                  Manage your children's progress in {currentSubject}
+                </p>
+              </div>
+            </div>
 
-          {children.length === 0 ? (
-            <Card className="bg-white/80 backdrop-blur-sm border-dashed border-2 border-gray-300">
-              <CardContent className="p-12 text-center">
-                <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No children added yet</h3>
-                <p className="text-gray-600 mb-4">Add your first child to start their learning journey</p>
+            {/* Children Section */}
+            <div className="mb-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Your Children</h2>
                 <Button 
                   onClick={() => setShowAddChild(true)}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2"
                 >
-                  Add Your First Child
+                  <Plus className="h-4 w-4" />
+                  Add New Child
                 </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-8">
-              {/* Enrolled Children */}
-              {enrolledChildren.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Ready to Learn {currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {enrolledChildren.map(child => (
-                      <ChildCard 
-                        key={child.id} 
-                        child={child} 
-                        onStartLearning={onStartLearning}
-                        onViewAnalytics={handleViewAnalytics}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Unenrolled Children */}
-              {unenrolledChildren.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                    Add to {currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {unenrolledChildren.map(child => (
-                      <UnenrolledChildCard key={child.id} child={child} subject={currentSubject} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* If no children in current subject but has children */}
-              {enrolledChildren.length === 0 && unenrolledChildren.length === 0 && (
+              </div>
+
+              {children.length === 0 ? (
                 <Card className="bg-white/80 backdrop-blur-sm border-dashed border-2 border-gray-300">
                   <CardContent className="p-12 text-center">
-                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No children added yet</h3>
+                    <p className="text-gray-600 mb-4">Add your first child to start their learning journey</p>
+                    <Button 
+                      onClick={() => setShowAddChild(true)}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                    >
+                      Add Your First Child
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-8">
+                  {/* Enrolled Children */}
+                  {enrolledChildren.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                        Ready to Learn {currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)}
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {enrolledChildren.map(child => (
+                          <ChildCard 
+                            key={child.id} 
+                            child={child} 
+                            onStartLearning={onStartLearning}
+                            onViewAnalytics={handleViewAnalytics}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Unenrolled Children */}
+                  {unenrolledChildren.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                        Add to {currentSubject.charAt(0).toUpperCase() + currentSubject.slice(1)}
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {unenrolledChildren.map(child => (
+                          <UnenrolledChildCard key={child.id} child={child} subject={currentSubject} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* If no children in current subject but has children */}
+                  {enrolledChildren.length === 0 && unenrolledChildren.length === 0 && (
+                    <Card className="bg-white/80 backdrop-blur-sm border-dashed border-2 border-gray-300">
+                      <CardContent className="p-12 text-center">
+                        <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          No children in {currentSubject} yet
+                        </h3>
+                        <p className="text-gray-600 mb-4">
+                          Add your existing children to {currentSubject} or create new ones
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          // Gamification Tab
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Parent Notifications */}
+              <ParentNotifications userId={user.id} />
+              
+              {/* Parent Badges */}
+              <ParentBadges userId={user.id} />
+            </div>
+            
+            {/* Redemption Recommendations for each child */}
+            <div className="space-y-8">
+              <h3 className="text-2xl font-bold text-gray-900">Smart Reward Recommendations</h3>
+              {children.length > 0 ? (
+                <div className="grid grid-cols-1 gap-8">
+                  {children.map(child => (
+                    <RedemptionRecommendations
+                      key={child.id}
+                      studentId={parseInt(child.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Trophy className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      No children in {currentSubject} yet
+                      No Children Added Yet
                     </h3>
                     <p className="text-gray-600 mb-4">
-                      Add your existing children to {currentSubject} or create new ones
+                      Add children to see personalized reward recommendations
                     </p>
+                    <Button
+                      onClick={() => setShowAddChild(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Your First Child
+                    </Button>
                   </CardContent>
                 </Card>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Add Child Modal */}
         {showAddChild && (

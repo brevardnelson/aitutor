@@ -4,6 +4,7 @@ import { dashboardAPI } from './api';
 import authRoutes from './auth-routes';
 import adminRoutes from './admin-routes';
 import teacherRoutes from './teacher-routes';
+import parentRoutes from './parent-api-routes';
 import { registerDocumentRoutes } from './document-routes';
 import { registerGamificationRoutes } from './gamification-routes';
 import { authenticateToken } from './auth-middleware';
@@ -30,6 +31,9 @@ app.use('/api/admin', adminRoutes);
 
 // Teacher routes  
 app.use('/api/teacher', teacherRoutes);
+
+// Parent routes
+app.use('/api/parent', parentRoutes);
 
 // Document Management routes
 registerDocumentRoutes(app);

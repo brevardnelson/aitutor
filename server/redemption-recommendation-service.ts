@@ -281,13 +281,15 @@ export class RedemptionRecommendationService {
     // Analyze subject performance
     const subjectPerformance = this.analyzeSubjectPerformance(recentSessions);
     
+    const studentData = student[0];
+    
     return {
       studentId,
-      currentXP: student[0].currentXP || 0,
-      currentLevel: student[0].currentLevel || 1,
-      gradeLevel: student[0].gradeLevel || 'standard',
-      weeklyXP: student[0].weeklyXP || 0,
-      monthlyXP: student[0].weeklyXP * 4 || 0, // Approximate
+      currentXP: studentData?.currentXP || 0,
+      currentLevel: studentData?.currentLevel || 1,
+      gradeLevel: studentData?.gradeLevel || 'standard',
+      weeklyXP: studentData?.weeklyXP || 0,
+      monthlyXP: (studentData?.weeklyXP || 0) * 4, // Approximate
       recentSubjects: subjectPerformance.recentSubjects,
       strongSubjects: subjectPerformance.strongSubjects,
       challengingSubjects: subjectPerformance.challengingSubjects,
@@ -322,8 +324,8 @@ export class RedemptionRecommendationService {
     });
 
     const recentSubjects = Array.from(subjectStats.keys()).slice(0, 3);
-    const strongSubjects = [];
-    const challengingSubjects = [];
+    const strongSubjects: string[] = [];
+    const challengingSubjects: string[] = [];
 
     subjectStats.forEach((stats, subject) => {
       const avgPerformance = stats.totalPerformance / stats.sessions;
@@ -471,7 +473,7 @@ export class RedemptionRecommendationService {
 
   // Generate parent guidance for reward choice
   private generateParentGuidance(rewardData: any, context: RecommendationContext, reasoning: string[]): string {
-    const guidelines = [];
+    const guidelines: string[] = [];
     
     if (rewardData.category === 'educational') {
       guidelines.push('Educational rewards reinforce learning and build positive associations with academic achievement.');
@@ -526,7 +528,7 @@ export class RedemptionRecommendationService {
   async getRedemptionHistory(studentId: number): Promise<any[]> {
     return await db.select({
       rewardName: schema.rewardCatalog.name,
-      xpCost: schema.rewardRedemptions.xpCost,
+      pointsSpent: schema.rewardRedemptions.pointsSpent,
       redeemedAt: schema.rewardRedemptions.redeemedAt,
       status: schema.rewardRedemptions.status
     })
