@@ -704,7 +704,13 @@ export const xpTransactions = pgTable('xp_transactions', {
   balanceBefore: integer('balance_before').notNull(),
   balanceAfter: integer('balance_after').notNull(),
   sessionId: integer('session_id').references(() => learningSessions.id), // Optional link to learning session
+  idempotencyKey: varchar('idempotency_key'), // For preventing duplicate XP awards
   createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+  return {
+    // Unique constraint on idempotency key to prevent duplicate transactions
+    idempotencyKeyIdx: unique().on(table.idempotencyKey),
+  };
 });
 
 // Badge definitions - all available badges in the system

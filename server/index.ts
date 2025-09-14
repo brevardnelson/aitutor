@@ -9,6 +9,7 @@ import { registerGamificationRoutes } from './gamification-routes';
 import { authenticateToken } from './auth-middleware';
 import { verifyChildAccess, verifyStudentAccess, verifySessionAccess } from './resource-authorization';
 import { validateParamIds, validateBodyIds, getValidatedId } from './id-validation-middleware';
+import { storage } from './storage';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -238,8 +239,67 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Dashboard API server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/api/health`);
+// CRITICAL FIX: Weekly Challenge Automation System
+async function initializeChallengeScheduler() {
+  try {
+    // Create weekly challenges immediately on startup
+    console.log('🎯 Initializing weekly challenges...');
+    await storage.createWeeklyChallenges();
+    console.log('✅ Weekly challenges created successfully');
+
+    // Set up automatic weekly challenge creation (every Monday at 12:01 AM)
+    const scheduleWeeklyChallenges = () => {
+      const now = new Date();
+      const nextMonday = new Date(now);
+      
+      // Calculate days until next Monday (0 = Sunday, 1 = Monday)
+      const daysUntilMonday = (1 - now.getDay() + 7) % 7;
+      if (daysUntilMonday === 0 && now.getHours() >= 0 && now.getMinutes() >= 1) {
+        // If it's already Monday and past 12:01 AM, schedule for next Monday
+        nextMonday.setDate(now.getDate() + 7);
+      } else {
+        nextMonday.setDate(now.getDate() + daysUntilMonday);
+      }
+      
+      nextMonday.setHours(0, 1, 0, 0); // 12:01 AM on Monday
+      
+      const msUntilNextMonday = nextMonday.getTime() - now.getTime();
+      
+      console.log(`⏰ Next weekly challenges scheduled for: ${nextMonday.toLocaleString()}`);
+      
+      setTimeout(async () => {
+        try {
+          console.log('🎯 Creating weekly challenges (scheduled)...');
+          await storage.createWeeklyChallenges();
+          console.log('✅ Weekly challenges created automatically');
+          
+          // Schedule the next week
+          scheduleWeeklyChallenges();
+        } catch (error) {
+          console.error('❌ Error creating scheduled weekly challenges:', error);
+          // Retry in 1 hour if there's an error
+          setTimeout(scheduleWeeklyChallenges, 60 * 60 * 1000);
+        }
+      }, msUntilNextMonday);
+    };
+
+    // Start the scheduling system
+    scheduleWeeklyChallenges();
+    
+  } catch (error) {
+    console.error('❌ Error initializing challenge scheduler:', error);
+    // Retry in 5 minutes if initialization fails
+    setTimeout(initializeChallengeScheduler, 5 * 60 * 1000);
+  }
+}
+
+// Start server with challenge automation
+app.listen(PORT, async () => {
+  console.log(`🚀 Dashboard API server running on port ${PORT}`);
+  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+  
+  // Initialize challenge automation system
+  await initializeChallengeScheduler();
+  
+  console.log('🎮 Weekly challenge automation system is active!');
 });

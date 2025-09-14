@@ -171,6 +171,11 @@ export class DashboardStorage {
     hintsUsed?: number;
     avgAttemptsPerProblem?: number;
   }): Promise<void> {
+    // Get session info for challenge tracking
+    const [sessionInfo] = await this.sql`
+      SELECT student_id, problems_completed FROM learning_sessions WHERE id = ${sessionId}
+    `;
+    
     const setClause = [];
     const values = [];
     
@@ -210,6 +215,30 @@ export class DashboardStorage {
         values as any[]
       );
     }
+    
+    // CRITICAL FIX: Wire up challenge auto-tracking for session completion
+    if (sessionInfo && updates.problemsCompleted !== undefined) {
+      try {
+        const problemsDelta = updates.problemsCompleted - (sessionInfo.problems_completed || 0);
+        if (problemsDelta > 0) {
+          // Track additional problems completed in this session
+          await this.autoUpdateChallengeProgress(sessionInfo.student_id, {
+            type: 'problem_completed',
+            value: problemsDelta,
+            metadata: {
+              sessionId,
+              sessionDuration: updates.duration,
+              accuracy: updates.correctAnswers && updates.problemsCompleted 
+                ? (updates.correctAnswers / updates.problemsCompleted) * 100 
+                : 0
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Failed to update challenge progress in learning session:', error);
+        // Don't throw - we don't want to break the session update
+      }
+    }
   }
 
   // Problem Attempts
@@ -241,6 +270,71 @@ export class DashboardStorage {
         ${attempt.skippedToFinalHint}
       ) RETURNING id
     `;
+    
+    // CRITICAL FIX: Wire up challenge auto-tracking for completed problems
+    if (attempt.isCompleted && attempt.isCorrect) {
+      try {
+        await this.autoUpdateChallengeProgress(attempt.studentId, {
+          type: 'problem_completed',
+          value: 1,
+          metadata: {
+            problemId: attempt.problemId,
+            difficulty: attempt.difficulty,
+            hintsUsed: attempt.hintsUsed,
+            timeSpent: attempt.timeSpent,
+            accuracy: 100, // Since isCorrect=true
+            sessionId: attempt.sessionId
+          }
+        });
+      } catch (error) {
+        console.error('Failed to update challenge progress:', error);
+        // Don't throw - we don't want to break the learning flow
+      }
+    }
+
+    // SECURITY FIX: Automatic XP earning for verified problem completions
+    if (attempt.isCompleted && attempt.isCorrect) {
+      try {
+        // Calculate XP based on verified problem data using the same logic as the routes
+        const baseXP = 10; // XP_CONSTANTS.PROBLEM_COMPLETION_BASE
+        const difficultyMultipliers = { easy: 1.0, medium: 1.5, hard: 2.0 };
+        const noHintsBonus = 5; // XP_CONSTANTS.NO_HINTS_BONUS
+        
+        let earnedXP = baseXP;
+        earnedXP *= difficultyMultipliers[attempt.difficulty] || 1.0;
+        
+        if (attempt.hintsUsed === 0) {
+          earnedXP += noHintsBonus;
+        }
+        
+        // TODO: Add streak multiplier if student has active daily streak
+        
+        earnedXP = Math.round(earnedXP);
+        
+        // Create idempotency key to prevent duplicate XP awards
+        const idempotencyKey = `problem_${attempt.problemId}_attempt_${result.id}`;
+        
+        await this.earnXP(attempt.studentId, {
+          type: 'earned',
+          amount: earnedXP,
+          source: 'problem_completion',
+          description: `Completed ${attempt.difficulty} problem${attempt.hintsUsed === 0 ? ' without hints!' : ''}`,
+          metadata: {
+            problemId: attempt.problemId,
+            difficulty: attempt.difficulty,
+            hintsUsed: attempt.hintsUsed,
+            timeSpent: attempt.timeSpent,
+            problemAttemptId: result.id
+          },
+          sessionId: attempt.sessionId,
+          idempotencyKey
+        });
+        
+      } catch (error) {
+        console.error('Failed to award XP for problem completion:', error);
+        // Don't throw - we don't want to break the learning flow
+      }
+    }
     
     return result.id;
   }
@@ -323,6 +417,14 @@ export class DashboardStorage {
     problemsCompleted?: number;
     accuracyRate?: number;
   }): Promise<void> {
+    // Get existing data to calculate deltas for challenge tracking
+    const existing = await this.sql`
+      SELECT * FROM daily_activity 
+      WHERE student_id = ${studentId} AND date = ${date}
+    `;
+    
+    const oldData = existing[0] || { total_time: 0, problems_completed: 0 };
+    
     // Upsert daily activity
     await this.sql`
       INSERT INTO daily_activity (
@@ -343,6 +445,40 @@ export class DashboardStorage {
         problems_completed = EXCLUDED.problems_completed,
         accuracy_rate = EXCLUDED.accuracy_rate
     `;
+    
+    // CRITICAL FIX: Wire up challenge auto-tracking for time and streak challenges
+    try {
+      // Track time spent if there's an increase
+      const timeDelta = (activity.totalTime || 0) - oldData.total_time;
+      if (timeDelta > 0) {
+        await this.autoUpdateChallengeProgress(studentId, {
+          type: 'time_spent',
+          value: timeDelta, // In minutes
+          metadata: {
+            date,
+            totalTimeToday: activity.totalTime || 0,
+            sessionsCount: activity.sessionsCount || 0
+          }
+        });
+      }
+      
+      // Update streak tracking if student was active today
+      if ((activity.problemsCompleted || 0) > 0) {
+        // Calculate current streak
+        const streakDays = await this.calculateCurrentStreak(studentId);
+        await this.autoUpdateChallengeProgress(studentId, {
+          type: 'streak_updated',
+          value: streakDays,
+          metadata: {
+            date,
+            problemsCompletedToday: activity.problemsCompleted || 0
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update challenge progress in daily activity:', error);
+      // Don't throw - we don't want to break the activity tracking
+    }
   }
 
   // Goals
@@ -659,8 +795,10 @@ export class DashboardStorage {
     description: string;
     metadata?: any;
     sessionId?: number;
-  }) {
-    await this.sql.begin(async (sql) => {
+    idempotencyKey?: string; // For preventing duplicate awards
+  }, connection?: any) {
+    const sql = connection || this.sql;
+    const executeTransaction = async (txnSql: any) => {
       // Get current XP data
       const currentXP = await sql`
         SELECT * FROM student_xp WHERE student_id = ${studentId}
@@ -698,18 +836,35 @@ export class DashboardStorage {
         WHERE student_id = ${studentId}
       `;
 
-      // Create transaction record
-      await sql`
-        INSERT INTO xp_transactions (
-          student_id, type, amount, source, description, metadata, 
-          balance_before, balance_after, session_id
-        ) VALUES (
-          ${studentId}, ${transaction.type}, ${transaction.amount}, 
-          ${transaction.source}, ${transaction.description}, ${JSON.stringify(transaction.metadata || {})},
-          ${balanceBefore}, ${newAvailableXP}, ${transaction.sessionId || null}
-        )
-      `;
-    });
+      // CRITICAL FIX: Create transaction record with idempotency protection
+      try {
+        await txnSql`
+          INSERT INTO xp_transactions (
+            student_id, type, amount, source, description, metadata, 
+            balance_before, balance_after, session_id, idempotency_key
+          ) VALUES (
+            ${studentId}, ${transaction.type}, ${transaction.amount}, 
+            ${transaction.source}, ${transaction.description}, ${JSON.stringify(transaction.metadata || {})},
+            ${balanceBefore}, ${newAvailableXP}, ${transaction.sessionId || null}, ${transaction.idempotencyKey || null}
+          )
+        `;
+      } catch (dbError: any) {
+        // Handle duplicate idempotency key gracefully
+        if (dbError.code === '23505' && transaction.idempotencyKey) {
+          console.log(`XP transaction ${transaction.idempotencyKey} already processed for student ${studentId}`);
+          return; // Skip duplicate transaction
+        }
+        throw dbError;
+      }
+    };
+
+    if (connection) {
+      // Use existing transaction
+      await executeTransaction(connection);
+    } else {
+      // Create new transaction
+      await this.sql.begin(executeTransaction);
+    }
 
     return this.getStudentXP(studentId);
   }
@@ -943,8 +1098,10 @@ export class DashboardStorage {
   }
 
   // Award a badge to a student
-  async awardBadge(studentId: number, badgeId: string, metadata?: any): Promise<boolean> {
+  async awardBadge(studentId: number, badgeId: string, metadata?: any, connection?: any): Promise<boolean> {
     try {
+      const sql = connection || this.sql;
+      
       // First check if badge definition exists
       const badge = await this.getBadgeDefinition(badgeId);
       if (!badge) {
@@ -953,7 +1110,7 @@ export class DashboardStorage {
 
       // Atomic insert with conflict handling to prevent race conditions
       // ON CONFLICT DO NOTHING ensures safe concurrent execution
-      const result = await this.sql`
+      const result = await sql`
         INSERT INTO student_badges (
           student_id, badge_id, progress, is_earned, earned_at, metadata
         ) VALUES (
@@ -972,13 +1129,15 @@ export class DashboardStorage {
 
       // Award XP if badge has reward (only for newly awarded badges)
       if (badge.xp_reward > 0) {
+        const idempotencyKey = `badge_${badgeId}_student_${studentId}_xp`;
         await this.earnXP(studentId, {
           type: 'earned',
           amount: badge.xp_reward,
           source: 'badge_reward',
           description: `Badge earned: ${badge.name}`,
-          metadata: { badgeId }
-        });
+          metadata: { badgeId },
+          idempotencyKey
+        }, connection);
       }
 
       return true;
@@ -1015,15 +1174,17 @@ export class DashboardStorage {
           WHERE student_id = ${studentId} AND badge_id = ${badgeId}
         `;
 
-        // Award XP reward
+        // Award XP reward with idempotency protection
         const badge = await this.getBadgeDefinition(badgeId);
         if (badge?.xp_reward > 0) {
+          const idempotencyKey = `badge_progress_${badgeId}_student_${studentId}_xp`;
           await this.earnXP(studentId, {
             type: 'earned',
             amount: badge.xp_reward,
             source: 'badge_reward',
             description: `Badge earned: ${badge.name}`,
-            metadata: { badgeId }
+            metadata: { badgeId },
+            idempotencyKey
           });
         }
       }
@@ -1169,6 +1330,537 @@ export class DashboardStorage {
       default:
         return false;
     }
+  }
+
+  // CHALLENGE SYSTEM METHODS
+
+  // Create a new challenge
+  async createChallenge(challenge: {
+    title: string;
+    description: string;
+    type: 'system' | 'teacher_created' | 'school_wide' | 'class_specific';
+    startDate: Date;
+    endDate: Date;
+    targetValue: number;
+    metric: 'problems_completed' | 'accuracy_improvement' | 'streak_days' | 'time_spent';
+    xpReward?: number;
+    badgeReward?: string;
+    gradeLevel?: string;
+    subject?: string;
+    schoolId?: number;
+    classId?: number;
+    createdBy?: number;
+    maxParticipants?: number;
+  }): Promise<number> {
+    const [result] = await this.sql`
+      INSERT INTO challenges (
+        title, description, type, start_date, end_date, target_value, metric,
+        xp_reward, badge_reward, grade_level, subject, school_id, class_id,
+        created_by, max_participants
+      ) VALUES (
+        ${challenge.title}, ${challenge.description}, ${challenge.type},
+        ${challenge.startDate.toISOString()}, ${challenge.endDate.toISOString()},
+        ${challenge.targetValue}, ${challenge.metric}, ${challenge.xpReward || 0},
+        ${challenge.badgeReward || null}, ${challenge.gradeLevel || null},
+        ${challenge.subject || null}, ${challenge.schoolId || null},
+        ${challenge.classId || null}, ${challenge.createdBy || null},
+        ${challenge.maxParticipants || null}
+      ) RETURNING id
+    `;
+    return result.id;
+  }
+
+  // Get challenges with filtering
+  async getChallenges(filters?: {
+    type?: string;
+    isActive?: boolean;
+    gradeLevel?: string;
+    subject?: string;
+    schoolId?: number;
+    classId?: number;
+    includeExpired?: boolean;
+  }) {
+    let whereConditions = ['1=1'];
+    let params: any[] = [];
+
+    if (filters?.type) {
+      whereConditions.push(`type = $${params.length + 1}`);
+      params.push(filters.type);
+    }
+
+    if (filters?.isActive !== undefined) {
+      whereConditions.push(`is_active = $${params.length + 1}`);
+      params.push(filters.isActive);
+    }
+
+    if (filters?.gradeLevel) {
+      whereConditions.push(`(grade_level IS NULL OR grade_level = $${params.length + 1})`);
+      params.push(filters.gradeLevel);
+    }
+
+    if (filters?.subject) {
+      whereConditions.push(`(subject IS NULL OR subject = $${params.length + 1})`);
+      params.push(filters.subject);
+    }
+
+    if (filters?.schoolId) {
+      whereConditions.push(`(school_id IS NULL OR school_id = $${params.length + 1})`);
+      params.push(filters.schoolId);
+    }
+
+    if (filters?.classId) {
+      whereConditions.push(`(class_id IS NULL OR class_id = $${params.length + 1})`);
+      params.push(filters.classId);
+    }
+
+    if (!filters?.includeExpired) {
+      whereConditions.push('end_date >= CURRENT_TIMESTAMP');
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+    
+    return await this.sql.unsafe(`
+      SELECT * FROM challenges 
+      WHERE ${whereClause}
+      ORDER BY start_date DESC
+    `, params);
+  }
+
+  // Get a specific challenge with participant count
+  async getChallenge(challengeId: number) {
+    const [challenge] = await this.sql`
+      SELECT 
+        c.*,
+        COUNT(cp.id) as participant_count
+      FROM challenges c
+      LEFT JOIN challenge_participation cp ON cp.challenge_id = c.id
+      WHERE c.id = ${challengeId}
+      GROUP BY c.id
+    `;
+    return challenge || null;
+  }
+
+  // Join a challenge with atomic concurrency safety
+  async joinChallenge(challengeId: number, studentId: number): Promise<boolean> {
+    try {
+      return await this.sql.begin(async (sql) => {
+        // CRITICAL FIX: Lock challenge row to prevent race conditions
+        const [challenge] = await sql`
+          SELECT * FROM challenges 
+          WHERE id = ${challengeId}
+          FOR UPDATE
+        `;
+
+        if (!challenge || !challenge.is_active) {
+          return false;
+        }
+
+        // Check if challenge has started and not ended
+        const now = new Date();
+        const startDate = new Date(challenge.start_date);
+        const endDate = new Date(challenge.end_date);
+        
+        if (now < startDate || now > endDate) {
+          return false;
+        }
+
+        // CRITICAL FIX: Atomic participant count check with row lock
+        if (challenge.max_participants && challenge.current_participants >= challenge.max_participants) {
+          return false;
+        }
+
+        // Check if student already joined (with transaction isolation)
+        const [existing] = await sql`
+          SELECT id FROM challenge_participation 
+          WHERE challenge_id = ${challengeId} AND student_id = ${studentId}
+        `;
+
+        if (existing) {
+          return false; // Already joined
+        }
+
+        // Calculate starting baseline if needed
+        let startingBaseline = 0;
+        if (challenge.metric === 'accuracy_improvement') {
+          const [stats] = await sql`
+            SELECT AVG(CASE WHEN is_correct THEN 100 ELSE 0 END) as avg_accuracy
+            FROM problem_attempts 
+            WHERE student_id = ${studentId} 
+            AND timestamp >= CURRENT_DATE - INTERVAL '30 days'
+          `;
+          startingBaseline = Math.round(stats?.avg_accuracy || 0);
+        }
+
+        // CRITICAL FIX: Atomic enrollment with proper error handling
+        try {
+          // Insert participation record
+          await sql`
+            INSERT INTO challenge_participation (
+              challenge_id, student_id, starting_baseline
+            ) VALUES (
+              ${challengeId}, ${studentId}, ${startingBaseline}
+            )
+          `;
+
+          // Update participant count atomically
+          await sql`
+            UPDATE challenges 
+            SET current_participants = current_participants + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${challengeId}
+          `;
+
+          console.log(`Student ${studentId} successfully joined challenge ${challengeId}`);
+          return true;
+
+        } catch (dbError: any) {
+          // Handle unique constraint violations gracefully
+          if (dbError.code === '23505') { // PostgreSQL unique violation
+            console.log(`Student ${studentId} already joined challenge ${challengeId} (concurrent enrollment detected)`);
+            return false;
+          }
+          throw dbError; // Re-throw other errors to trigger transaction rollback
+        }
+      });
+
+    } catch (error) {
+      console.error(`Error joining challenge ${challengeId} for student ${studentId}:`, error);
+      return false;
+    }
+  }
+
+  // Update challenge progress with atomic completion flow
+  async updateChallengeProgress(challengeId: number, studentId: number, newValue: number, context?: any): Promise<void> {
+    await this.sql.begin(async (sql) => {
+      // Get current participation with row lock to prevent race conditions
+      const [participation] = await sql`
+        SELECT * FROM challenge_participation 
+        WHERE challenge_id = ${challengeId} AND student_id = ${studentId}
+        FOR UPDATE
+      `;
+
+      if (!participation || participation.is_completed) {
+        return; // Not participating or already completed
+      }
+
+      // Get challenge details
+      const challenge = await this.getChallenge(challengeId);
+      if (!challenge) return;
+
+      // Only update if newValue is actually higher (prevents regression)
+      if (newValue <= participation.current_value) {
+        return;
+      }
+
+      // Update progress history
+      const progressHistory = participation.progress_history || [];
+      progressHistory.push({
+        date: new Date().toISOString().split('T')[0],
+        value: newValue,
+        context
+      });
+
+      // Check if challenge is completed
+      const isCompleted = newValue >= challenge.target_value;
+
+      // Update participation record atomically
+      await sql`
+        UPDATE challenge_participation 
+        SET 
+          current_value = ${newValue},
+          progress_history = ${JSON.stringify(progressHistory)},
+          is_completed = ${isCompleted},
+          completed_at = ${isCompleted ? new Date().toISOString() : null},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE challenge_id = ${challengeId} AND student_id = ${studentId}
+      `;
+
+      // CRITICAL FIX: Award rewards atomically if challenge just completed
+      // Use OR logic to allow separate XP and badge awards
+      if (isCompleted && (!participation.xp_awarded || !participation.badge_awarded)) {
+        await this.completeChallenge(challengeId, studentId, sql);
+      }
+    });
+  }
+
+  // Complete a challenge and award rewards atomically
+  private async completeChallenge(challengeId: number, studentId: number, sql?: any): Promise<void> {
+    const connection = sql || this.sql;
+    
+    const challenge = await this.getChallenge(challengeId);
+    if (!challenge) return;
+
+    try {
+      // CRITICAL FIX: Atomic reward distribution with proper single-award semantics
+      
+      // Award XP if eligible - use idempotent UPDATE...WHERE pattern
+      if (challenge.xp_reward > 0) {
+        const [xpUpdate] = await connection`
+          UPDATE challenge_participation 
+          SET xp_awarded = true, updated_at = CURRENT_TIMESTAMP
+          WHERE challenge_id = ${challengeId} AND student_id = ${studentId} AND xp_awarded = false
+          RETURNING id
+        `;
+
+        // Only award XP if we successfully claimed the award
+        if (xpUpdate) {
+          const idempotencyKey = `challenge_${challengeId}_student_${studentId}_xp`;
+          await this.earnXP(studentId, {
+            type: 'earned',
+            amount: challenge.xp_reward,
+            source: 'challenge_completion',
+            description: `Challenge completed: ${challenge.title}`,
+            metadata: { challengeId },
+            idempotencyKey
+          }, connection);
+        }
+      }
+
+      // Award badge if eligible - use idempotent UPDATE...WHERE pattern
+      if (challenge.badge_reward) {
+        const [badgeUpdate] = await connection`
+          UPDATE challenge_participation 
+          SET badge_awarded = true, updated_at = CURRENT_TIMESTAMP
+          WHERE challenge_id = ${challengeId} AND student_id = ${studentId} AND badge_awarded = false
+          RETURNING id
+        `;
+
+        // Only award badge if we successfully claimed the award
+        if (badgeUpdate) {
+          await this.awardBadge(studentId, challenge.badge_reward, {
+            challengeId,
+            challengeTitle: challenge.title
+          }, connection);
+        }
+      }
+
+      console.log(`Challenge ${challengeId} completed for student ${studentId}: XP=${challenge.xp_reward}, Badge=${challenge.badge_reward || 'none'}`);
+      
+    } catch (error) {
+      console.error(`Error completing challenge ${challengeId} for student ${studentId}:`, error);
+      throw error; // Re-throw to trigger transaction rollback
+    }
+  }
+
+  // Get student's challenge participation
+  async getStudentChallenges(studentId: number, includeCompleted: boolean = true) {
+    let whereClause = 'cp.student_id = $1';
+    let params = [studentId];
+
+    if (!includeCompleted) {
+      whereClause += ' AND cp.is_completed = false';
+    }
+
+    return await this.sql.unsafe(`
+      SELECT 
+        cp.*,
+        c.title, c.description, c.type, c.start_date, c.end_date,
+        c.target_value, c.metric, c.xp_reward, c.badge_reward,
+        (cp.current_value::float / c.target_value * 100) as progress_percentage
+      FROM challenge_participation cp
+      JOIN challenges c ON c.id = cp.challenge_id
+      WHERE ${whereClause}
+      ORDER BY cp.joined_at DESC
+    `, params);
+  }
+
+  // Get challenge leaderboard
+  async getChallengeLeaderboard(challengeId: number, limit: number = 10) {
+    return await this.sql`
+      SELECT 
+        cp.student_id,
+        cp.current_value,
+        cp.is_completed,
+        cp.completed_at,
+        sp.name as student_name,
+        sp.grade,
+        ROW_NUMBER() OVER (ORDER BY cp.current_value DESC, cp.completed_at ASC NULLS LAST) as rank
+      FROM challenge_participation cp
+      JOIN students s ON s.id = cp.student_id
+      JOIN student_profiles sp ON sp.student_id = s.id
+      WHERE cp.challenge_id = ${challengeId}
+      ORDER BY cp.current_value DESC, cp.completed_at ASC NULLS LAST
+      LIMIT ${limit}
+    `;
+  }
+
+  // Helper method to calculate current streak for challenge tracking
+  private async calculateCurrentStreak(studentId: number): Promise<number> {
+    try {
+      // Get daily activity for the past 30 days, ordered by date descending
+      const activities = await this.sql`
+        SELECT date, problems_completed 
+        FROM daily_activity 
+        WHERE student_id = ${studentId} 
+        AND date >= CURRENT_DATE - INTERVAL '30 days'
+        ORDER BY date DESC
+      `;
+
+      if (activities.length === 0) return 0;
+
+      let streak = 0;
+      const today = new Date().toISOString().split('T')[0];
+      let currentDate = today;
+
+      for (const activity of activities) {
+        if (activity.date === currentDate && activity.problems_completed > 0) {
+          streak++;
+          // Move to previous day
+          const prevDate = new Date(currentDate);
+          prevDate.setDate(prevDate.getDate() - 1);
+          currentDate = prevDate.toISOString().split('T')[0];
+        } else if (activity.date === currentDate && activity.problems_completed === 0) {
+          // Skip inactive days, but check if we should continue the streak from yesterday
+          const prevDate = new Date(currentDate);
+          prevDate.setDate(prevDate.getDate() - 1);
+          currentDate = prevDate.toISOString().split('T')[0];
+        } else {
+          break; // Streak broken
+        }
+      }
+
+      return streak;
+    } catch (error) {
+      console.error('Error calculating current streak:', error);
+      return 0;
+    }
+  }
+
+  // Auto-update challenge progress based on student activity
+  async autoUpdateChallengeProgress(studentId: number, activity: {
+    type: 'problem_completed' | 'streak_updated' | 'time_spent';
+    value: number;
+    metadata?: any;
+  }): Promise<void> {
+    // Get active challenges for this student
+    const challenges = await this.sql`
+      SELECT cp.*, c.metric, c.target_value
+      FROM challenge_participation cp
+      JOIN challenges c ON c.id = cp.challenge_id
+      WHERE cp.student_id = ${studentId} 
+      AND cp.is_completed = false
+      AND c.is_active = true
+      AND c.end_date >= CURRENT_TIMESTAMP
+    `;
+
+    for (const participation of challenges) {
+      let shouldUpdate = false;
+      let newValue = participation.current_value;
+
+      switch (participation.metric) {
+        case 'problems_completed':
+          if (activity.type === 'problem_completed') {
+            newValue = participation.current_value + 1;
+            shouldUpdate = true;
+          }
+          break;
+
+        case 'streak_days':
+          if (activity.type === 'streak_updated') {
+            newValue = activity.value;
+            shouldUpdate = true;
+          }
+          break;
+
+        case 'time_spent':
+          if (activity.type === 'time_spent') {
+            newValue = participation.current_value + activity.value;
+            shouldUpdate = true;
+          }
+          break;
+
+        case 'accuracy_improvement':
+          if (activity.type === 'problem_completed' && activity.metadata?.accuracy) {
+            // Calculate improvement from baseline
+            const improvement = activity.metadata.accuracy - participation.starting_baseline;
+            if (improvement > participation.current_value) {
+              newValue = improvement;
+              shouldUpdate = true;
+            }
+          }
+          break;
+      }
+
+      if (shouldUpdate) {
+        await this.updateChallengeProgress(participation.challenge_id, studentId, newValue, activity.metadata);
+      }
+    }
+  }
+
+  // Create weekly system challenges (to be called by scheduled task)
+  async createWeeklyChallenges(): Promise<void> {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Start of current week
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    // CRITICAL FIX: Use advisory lock to prevent race conditions in challenge creation
+    const weekKey = startOfWeek.getTime(); // Unique identifier for this week
+    const lockId = weekKey % 2147483647; // Convert to PostgreSQL bigint range
+    
+    return await this.sql.begin(async (sql) => {
+      // Acquire advisory lock for this week
+      const [lockResult] = await sql`SELECT pg_try_advisory_xact_lock(${lockId}) as acquired`;
+      
+      if (!lockResult.acquired) {
+        console.log('Another process is creating weekly challenges, skipping...');
+        return; // Another process is already handling challenge creation
+      }
+
+      // Double-check if challenges already exist for this week (within lock)
+      const [existing] = await sql`
+        SELECT id FROM challenges 
+        WHERE type = 'system' 
+        AND start_date >= ${startOfWeek.toISOString()}
+        AND start_date < ${endOfWeek.toISOString()}
+      `;
+
+      if (existing) {
+        return; // Challenges already created for this week
+      }
+
+    // Create standard weekly challenges
+    const weeklyCharges = [
+      {
+        title: 'Problem Solver Challenge',
+        description: 'Complete 15 problems this week to earn bonus XP!',
+        targetValue: 15,
+        metric: 'problems_completed' as const,
+        xpReward: 100
+      },
+      {
+        title: 'Streak Master',
+        description: 'Maintain a 5-day solving streak this week!',
+        targetValue: 5,
+        metric: 'streak_days' as const,
+        xpReward: 150
+      },
+      {
+        title: 'Speed Demon',
+        description: 'Spend 2 hours practicing math this week!',
+        targetValue: 120, // 120 minutes
+        metric: 'time_spent' as const,
+        xpReward: 75
+      }
+    ];
+
+      for (const challenge of weeklyCharges) {
+        await this.createChallenge({
+          title: challenge.title,
+          description: challenge.description,
+          type: 'system',
+          startDate: startOfWeek,
+          endDate: endOfWeek,
+          targetValue: challenge.targetValue,
+          metric: challenge.metric,
+          xpReward: challenge.xpReward
+        });
+      }
+    }); // Close the transaction block properly
   }
 
   // Close database connection
