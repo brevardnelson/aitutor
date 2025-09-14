@@ -484,3 +484,190 @@ export const invitations = pgTable('invitations', {
   uniqueInvitation: unique().on(table.email, table.role, table.schoolId, table.classId),
   // Note: Active invitation constraint (not used + not expired) enforced at application level
 }));
+
+// DOCUMENT MANAGEMENT SYSTEM - For AI Model Training and Curriculum Content
+
+// Document categories for organizing course materials
+export const documentCategories = pgTable('document_categories', {
+  id: serial('id').primaryKey(),
+  name: varchar('name').notNull(), // e.g., 'Textbooks', 'Worksheets', 'Curriculum Standards', 'Assessment Guides'
+  description: text('description'),
+  parentCategoryId: integer('parent_category_id').references(function() { return documentCategories.id; }), // Self-referencing for hierarchical categories
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Curriculum documents and course materials uploaded by admins
+export const curriculumDocuments = pgTable('curriculum_documents', {
+  id: serial('id').primaryKey(),
+  title: varchar('title').notNull(),
+  description: text('description'),
+  fileName: varchar('file_name').notNull(),
+  originalFileName: varchar('original_file_name').notNull(),
+  filePath: varchar('file_path').notNull(), // Path in object storage
+  fileSize: integer('file_size').notNull(), // File size in bytes
+  mimeType: varchar('mime_type').notNull(), // e.g., 'application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  
+  // Educational Classification
+  gradeLevel: varchar('grade_level').notNull(), // Supports dual educational systems: US grades (K-13) & Caribbean levels
+  subject: varchar('subject').notNull(), // 'math', 'english', 'science', etc.
+  topic: varchar('topic'), // Specific topic within subject
+  difficulty: varchar('difficulty').default('medium'), // 'easy', 'medium', 'hard'
+  
+  // Content Organization
+  categoryId: integer('category_id').references(() => documentCategories.id),
+  tags: json('tags').$type<string[]>().default([]), // Keywords for searchability
+  contentType: varchar('content_type').notNull(), // 'textbook', 'worksheet', 'curriculum_standard', 'assessment', 'lesson_plan', 'reference_material'
+  
+  // AI Processing Status
+  isProcessed: boolean('is_processed').default(false), // Has the document been processed for AI training?
+  processingStatus: varchar('processing_status').default('pending'), // 'pending', 'processing', 'completed', 'failed'
+  processingError: text('processing_error'), // Error message if processing failed
+  extractedText: text('extracted_text'), // Text content extracted from document
+  aiSummary: text('ai_summary'), // AI-generated summary of document content
+  keyWords: json('key_words').$type<string[]>().default([]), // AI-extracted keywords
+  
+  // Content Quality and Validation
+  isValidated: boolean('is_validated').default(false), // Has content been validated by educators?
+  validatedBy: integer('validated_by').references(() => users.id), // User who validated the content
+  validatedAt: timestamp('validated_at'),
+  contentQualityScore: decimal('content_quality_score'), // AI-assessed content quality (0-100)
+  
+  // Administrative
+  schoolId: integer('school_id').references(() => schools.id), // Optional: school-specific documents
+  uploadedBy: integer('uploaded_by').references(() => users.id).notNull(),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique file path per school (or globally if school is null)
+  uniqueFilePath: unique().on(table.filePath, table.schoolId),
+}));
+
+// Document versions - track changes to curriculum documents over time
+export const documentVersions = pgTable('document_versions', {
+  id: serial('id').primaryKey(),
+  documentId: integer('document_id').references(() => curriculumDocuments.id).notNull(),
+  versionNumber: integer('version_number').notNull(),
+  changeSummary: text('change_summary'),
+  filePath: varchar('file_path').notNull(), // Path to this version in object storage
+  fileSize: integer('file_size').notNull(),
+  uploadedBy: integer('uploaded_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  // Unique version per document
+  uniqueDocumentVersion: unique().on(table.documentId, table.versionNumber),
+}));
+
+// Document access permissions - control who can access specific documents
+export const documentPermissions = pgTable('document_permissions', {
+  id: serial('id').primaryKey(),
+  documentId: integer('document_id').references(() => curriculumDocuments.id).notNull(),
+  userId: integer('user_id').references(() => users.id),
+  roleType: varchar('role_type'), // 'system_admin', 'school_admin', 'teacher', etc.
+  schoolId: integer('school_id').references(() => schools.id), // Scoped permissions per school
+  permissionLevel: varchar('permission_level').notNull(), // 'read', 'write', 'admin'
+  grantedBy: integer('granted_by').references(() => users.id).notNull(),
+  expiresAt: timestamp('expires_at'), // Optional expiration
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  // Unique permission per document-user/role combination
+  uniqueDocumentPermission: unique().on(table.documentId, table.userId, table.roleType, table.schoolId),
+}));
+
+// AI model training sessions - track how documents are used for AI customization
+export const aiTrainingSessions = pgTable('ai_training_sessions', {
+  id: serial('id').primaryKey(),
+  sessionName: varchar('session_name').notNull(),
+  description: text('description'),
+  
+  // Scope Configuration
+  gradeLevel: varchar('grade_level'), // Target grade level for training
+  subject: varchar('subject'), // Target subject
+  
+  // Training Parameters
+  modelProvider: varchar('model_provider').notNull(), // 'openai', 'anthropic'
+  modelType: varchar('model_type').notNull(), // 'gpt-4', 'claude-3', etc.
+  trainingObjective: varchar('training_objective').notNull(), // 'question_generation', 'content_adaptation', 'difficulty_assessment'
+  
+  // Document Set
+  documentIds: json('document_ids').$type<number[]>().notNull(), // Array of curriculum document IDs used
+  totalDocuments: integer('total_documents').notNull(),
+  totalTokens: integer('total_tokens'), // Total tokens processed
+  
+  // Status and Results
+  status: varchar('status').default('pending'), // 'pending', 'running', 'completed', 'failed'
+  progressPercent: decimal('progress_percent').default('0'),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  errorMessage: text('error_message'),
+  
+  // Quality Metrics
+  trainingAccuracy: decimal('training_accuracy'), // Training effectiveness score
+  validationScore: decimal('validation_score'), // Validation against test data
+  
+  // Administrative
+  initiatedBy: integer('initiated_by').references(() => users.id).notNull(),
+  schoolId: integer('school_id').references(() => schools.id), // Optional: school-specific training
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Document usage analytics - track how documents are used in the AI system
+export const documentUsageAnalytics = pgTable('document_usage_analytics', {
+  id: serial('id').primaryKey(),
+  documentId: integer('document_id').references(() => curriculumDocuments.id).notNull(),
+  
+  // Usage Metrics
+  timesUsedInTraining: integer('times_used_in_training').default(0),
+  timesReferencedInQuestions: integer('times_referenced_in_questions').default(0),
+  averageStudentPerformance: decimal('average_student_performance'), // Performance on questions derived from this document
+  
+  // Content Effectiveness
+  effectivenessScore: decimal('effectiveness_score'), // Overall effectiveness rating (0-100)
+  studentEngagementScore: decimal('student_engagement_score'), // How engaging students find content from this document
+  teacherFeedbackScore: decimal('teacher_feedback_score'), // Teacher ratings of questions/content derived
+  
+  // Date Tracking
+  lastUsedAt: timestamp('last_used_at'),
+  analyticsDate: varchar('analytics_date').notNull(), // YYYY-MM-DD for daily aggregation
+  
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique analytics per document per date
+  uniqueDocumentAnalytics: unique().on(table.documentId, table.analyticsDate),
+}));
+
+// Content templates - AI-generated templates based on curriculum documents
+export const contentTemplates = pgTable('content_templates', {
+  id: serial('id').primaryKey(),
+  name: varchar('name').notNull(),
+  description: text('description'),
+  
+  // Template Classification
+  templateType: varchar('template_type').notNull(), // 'question', 'explanation', 'example', 'practice_problem'
+  gradeLevel: varchar('grade_level').notNull(),
+  subject: varchar('subject').notNull(),
+  topic: varchar('topic'),
+  difficulty: varchar('difficulty').notNull(),
+  
+  // Template Content
+  templateContent: text('template_content').notNull(), // JSON or structured template
+  variables: json('variables').$type<string[]>().default([]), // Dynamic variables in template
+  
+  // Source Information
+  sourceDocumentIds: json('source_document_ids').$type<number[]>(), // Documents used to create this template
+  generatedBy: varchar('generated_by').notNull(), // AI model that generated this
+  
+  // Usage and Quality
+  timesUsed: integer('times_used').default(0),
+  successRate: decimal('success_rate'), // Success rate when used in practice
+  qualityScore: decimal('quality_score'), // Quality assessment score
+  
+  // Administrative
+  createdBy: integer('created_by').references(() => users.id).notNull(),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});

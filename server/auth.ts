@@ -41,6 +41,10 @@ export interface AuthenticatedUser {
     name: string;
     isActive: boolean;
   };
+  
+  // Helper methods for role checking
+  hasRole(role: UserRole, schoolId?: number): boolean;
+  schoolIds: number[];
 }
 
 export interface AuthTokenPayload {
@@ -245,7 +249,7 @@ export class ServerAuthService {
         }
       }
 
-      return {
+      const authenticatedUser: AuthenticatedUser = {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
@@ -260,7 +264,19 @@ export class ServerAuthService {
         })),
         primaryRole,
         currentSchool,
+        schoolIds: [...new Set(userRoles.filter(r => r.schoolId).map(r => r.schoolId!))],
+        
+        // Implement hasRole method
+        hasRole: (role: UserRole, schoolId?: number) => {
+          return userRoles.some(r => 
+            r.role === role && 
+            r.isActive && 
+            (!schoolId || r.schoolId === schoolId)
+          );
+        },
       };
+      
+      return authenticatedUser;
     } catch (error) {
       console.error('Get user error:', error);
       return null;

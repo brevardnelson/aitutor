@@ -4,6 +4,7 @@ import { dashboardAPI } from './api';
 import authRoutes from './auth-routes';
 import adminRoutes from './admin-routes';
 import teacherRoutes from './teacher-routes';
+import { registerDocumentRoutes } from './document-routes';
 import { authenticateToken } from './auth-middleware';
 import { verifyChildAccess, verifyStudentAccess, verifySessionAccess } from './resource-authorization';
 import { validateParamIds, validateBodyIds, getValidatedId } from './id-validation-middleware';
@@ -27,6 +28,9 @@ app.use('/api/admin', adminRoutes);
 
 // Teacher routes  
 app.use('/api/teacher', teacherRoutes);
+
+// Document Management routes
+registerDocumentRoutes(app);
 
 // Dashboard API routes (now with proper resource authorization and ID validation)
 app.get('/api/dashboard/:childId/:subject', 

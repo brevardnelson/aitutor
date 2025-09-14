@@ -6,7 +6,7 @@ import * as schema from '../shared/schema';
 // Database connection and ORM setup
 const connectionString = process.env.DATABASE_URL!;
 const sql = postgres(connectionString);
-const db = drizzle(sql, { schema });
+export const db = drizzle(sql, { schema });
 
 // Updated schema mappings for raw SQL queries when needed
 const tableNames = {
