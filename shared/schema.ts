@@ -744,6 +744,8 @@ export const studentBadges = pgTable('student_badges', {
   earnedAt: timestamp('earned_at'),
   notificationSent: boolean('notification_sent').default(false), // Track if parent was notified
   metadata: json('metadata'), // Additional earning context
+  isActive: boolean('is_active').default(true), // For soft deletes or deactivation
+  displayOrder: integer('display_order').default(0), // For sorting badge collections
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   // Unique badge progress per student

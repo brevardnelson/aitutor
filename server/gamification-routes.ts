@@ -69,6 +69,122 @@ function calculateXPForProblem(difficulty: string, hintsUsed: number, hasStreak:
 
 export function registerGamificationRoutes(app: Express): void {
   
+  // BADGE ROUTES
+  
+  // Get all badge definitions (filtered)
+  app.get('/api/gamification/badges', authenticateToken, async (req, res) => {
+    try {
+      const { category, grade_level, subject, include_secret } = req.query;
+      
+      const badges = await storage.getBadgeDefinitions({
+        category: category as string,
+        targetRole: 'student',
+        gradeLevel: grade_level as string,
+        subject: subject as string,
+        includeSecret: include_secret === 'true'
+      });
+      
+      res.json(badges);
+    } catch (error) {
+      console.error('Error fetching badges:', error);
+      res.status(500).json({ error: 'Failed to fetch badges' });
+    }
+  });
+
+  // Get student's badges
+  app.get('/api/gamification/badges/student/:studentId', authenticateToken, async (req, res) => {
+    try {
+      const studentId = parseInt(req.params.studentId);
+      const { include_progress } = req.query;
+      
+      if (!studentId) {
+        return res.status(400).json({ error: 'Invalid student ID' });
+      }
+
+      // Check if user has access to this student
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      if (!req.user.hasRole('system_admin') && !await storage.canUserAccessStudent(req.user.id, studentId)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const badges = await storage.getStudentBadges(studentId, include_progress !== 'false');
+      res.json(badges);
+    } catch (error) {
+      console.error('Error fetching student badges:', error);
+      res.status(500).json({ error: 'Failed to fetch student badges' });
+    }
+  });
+
+  // Award a badge to a student (manual)
+  app.post('/api/gamification/badges/award', authenticateToken, async (req, res) => {
+    try {
+      const { studentId, badgeId, metadata } = req.body;
+      
+      if (!studentId || !badgeId) {
+        return res.status(400).json({ error: 'Student ID and badge ID required' });
+      }
+
+      // Check if user has access to this student (teachers can award badges only to their students)
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      // Only system admins OR teachers with proper student access can award badges
+      if (!req.user.hasRole('system_admin') && 
+          !(req.user.hasRole('teacher') && await storage.canUserAccessStudent(req.user.id, studentId))) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const awarded = await storage.awardBadge(studentId, badgeId, metadata);
+      
+      if (awarded) {
+        res.json({ success: true, message: 'Badge awarded successfully' });
+      } else {
+        res.status(400).json({ error: 'Badge already awarded or invalid badge ID' });
+      }
+    } catch (error) {
+      console.error('Error awarding badge:', error);
+      res.status(500).json({ error: 'Failed to award badge' });
+    }
+  });
+
+  // Update badge progress (ADMIN/TEACHER ONLY - NO CLIENT-CONTROLLED PROGRESS)
+  app.post('/api/gamification/badges/progress', authenticateToken, async (req, res) => {
+    try {
+      const { studentId, badgeId, metadata } = req.body;
+      
+      if (!studentId || !badgeId) {
+        return res.status(400).json({ error: 'Student ID and badge ID required' });
+      }
+
+      // SECURITY FIX: Only system admins OR teachers with proper student access can update badge progress
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      // Match authorization logic from award endpoint - prevents students/parents from manipulating progress
+      if (!req.user.hasRole('system_admin') && 
+          !(req.user.hasRole('teacher') && await storage.canUserAccessStudent(req.user.id, studentId))) {
+        return res.status(403).json({ error: 'Access denied - only teachers and admins can update badge progress' });
+      }
+
+      // SECURITY FIX: Remove client-controlled progress - progress should be calculated server-side
+      // Badge progress should only be updated based on verified student activities, not arbitrary client input
+      return res.status(400).json({ 
+        error: 'Direct progress manipulation not allowed. Badge progress is automatically calculated from verified student activities.' 
+      });
+      
+    } catch (error) {
+      console.error('Error updating badge progress:', error);
+      res.status(500).json({ error: 'Failed to update badge progress' });
+    }
+  });
+
+  // XP ROUTES
+  
   // Get student XP summary
   app.get('/api/gamification/xp/:studentId', authenticateToken, async (req, res) => {
     try {

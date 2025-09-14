@@ -856,6 +856,321 @@ export class DashboardStorage {
     return 1;
   }
 
+  // BADGE SYSTEM METHODS
+
+  // Create a badge definition
+  async createBadgeDefinition(badge: {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    category: 'achievement' | 'mastery' | 'streak' | 'social' | 'special';
+    tier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+    xpReward: number;
+    criteria: any;
+    targetRole: 'student' | 'teacher' | 'parent';
+    gradeLevel?: string;
+    subject?: string;
+    isSecret?: boolean;
+    displayOrder?: number;
+  }): Promise<void> {
+    await this.sql`
+      INSERT INTO badge_definitions (
+        id, name, description, icon, category, tier, xp_reward,
+        criteria, target_role, grade_level, subject, is_secret, display_order
+      ) VALUES (
+        ${badge.id}, ${badge.name}, ${badge.description}, ${badge.icon},
+        ${badge.category}, ${badge.tier}, ${badge.xpReward},
+        ${JSON.stringify(badge.criteria)}, ${badge.targetRole},
+        ${badge.gradeLevel || null}, ${badge.subject || null},
+        ${badge.isSecret || false}, ${badge.displayOrder || 0}
+      )
+    `;
+  }
+
+  // Get all badge definitions (optionally filtered)
+  async getBadgeDefinitions(filters?: {
+    category?: string;
+    targetRole?: string;
+    gradeLevel?: string;
+    subject?: string;
+    includeSecret?: boolean;
+  }) {
+    // Build WHERE conditions and parameters programmatically for safe SQL construction
+    const conditions: string[] = ['is_active = true'];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters) {
+      if (filters.category) {
+        conditions.push(`category = $${paramIndex++}`);
+        params.push(filters.category);
+      }
+      if (filters.targetRole) {
+        conditions.push(`target_role = $${paramIndex++}`);
+        params.push(filters.targetRole);
+      }
+      if (filters.gradeLevel) {
+        conditions.push(`(grade_level IS NULL OR grade_level = $${paramIndex++})`);
+        params.push(filters.gradeLevel);
+      }
+      if (filters.subject) {
+        conditions.push(`(subject IS NULL OR subject = $${paramIndex++})`);
+        params.push(filters.subject);
+      }
+      if (!filters.includeSecret) {
+        conditions.push('is_secret = false');
+      }
+    }
+
+    // Build and execute single safe SQL query
+    const whereClause = conditions.join(' AND ');
+    const query = `
+      SELECT * FROM badge_definitions 
+      WHERE ${whereClause}
+      ORDER BY display_order, created_at
+    `;
+    
+    return await this.sql.unsafe(query, params);
+  }
+
+  // Get a specific badge definition
+  async getBadgeDefinition(badgeId: string) {
+    const [badge] = await this.sql`
+      SELECT * FROM badge_definitions WHERE id = ${badgeId} AND is_active = true
+    `;
+    return badge || null;
+  }
+
+  // Award a badge to a student
+  async awardBadge(studentId: number, badgeId: string, metadata?: any): Promise<boolean> {
+    try {
+      // First check if badge definition exists
+      const badge = await this.getBadgeDefinition(badgeId);
+      if (!badge) {
+        throw new Error(`Badge definition not found: ${badgeId}`);
+      }
+
+      // Atomic insert with conflict handling to prevent race conditions
+      // ON CONFLICT DO NOTHING ensures safe concurrent execution
+      const result = await this.sql`
+        INSERT INTO student_badges (
+          student_id, badge_id, progress, is_earned, earned_at, metadata
+        ) VALUES (
+          ${studentId}, ${badgeId}, 100, true, CURRENT_TIMESTAMP, ${JSON.stringify(metadata || {})}
+        )
+        ON CONFLICT (student_id, badge_id) DO NOTHING
+        RETURNING id
+      `;
+
+      // Check if badge was actually inserted (new award) or already existed
+      const wasNewlyAwarded = result.length > 0;
+      
+      if (!wasNewlyAwarded) {
+        return false; // Badge already awarded
+      }
+
+      // Award XP if badge has reward (only for newly awarded badges)
+      if (badge.xp_reward > 0) {
+        await this.earnXP(studentId, {
+          type: 'earned',
+          amount: badge.xp_reward,
+          source: 'badge_reward',
+          description: `Badge earned: ${badge.name}`,
+          metadata: { badgeId }
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error awarding badge:', error);
+      return false;
+    }
+  }
+
+  // Update badge progress (for progressive badges)
+  async updateBadgeProgress(studentId: number, badgeId: string, progress: number, metadata?: any): Promise<void> {
+    // First ensure student has a badge progress record
+    await this.sql`
+      INSERT INTO student_badges (student_id, badge_id, progress, metadata)
+      VALUES (${studentId}, ${badgeId}, ${progress}, ${JSON.stringify(metadata || {})})
+      ON CONFLICT (student_id, badge_id) 
+      DO UPDATE SET 
+        progress = ${progress},
+        metadata = ${JSON.stringify(metadata || {})},
+        created_at = CURRENT_TIMESTAMP
+    `;
+
+    // If progress reaches 100 and not already earned, award the badge
+    if (progress >= 100) {
+      const [existing] = await this.sql`
+        SELECT is_earned FROM student_badges 
+        WHERE student_id = ${studentId} AND badge_id = ${badgeId}
+      `;
+
+      if (existing && !existing.is_earned) {
+        await this.sql`
+          UPDATE student_badges 
+          SET is_earned = true, earned_at = CURRENT_TIMESTAMP
+          WHERE student_id = ${studentId} AND badge_id = ${badgeId}
+        `;
+
+        // Award XP reward
+        const badge = await this.getBadgeDefinition(badgeId);
+        if (badge?.xp_reward > 0) {
+          await this.earnXP(studentId, {
+            type: 'earned',
+            amount: badge.xp_reward,
+            source: 'badge_reward',
+            description: `Badge earned: ${badge.name}`,
+            metadata: { badgeId }
+          });
+        }
+      }
+    }
+  }
+
+  // Get student's badges
+  async getStudentBadges(studentId: number, includeProgress: boolean = true) {
+    if (includeProgress) {
+      return await this.sql`
+        SELECT 
+          sb.*,
+          bd.name, bd.description, bd.icon, bd.category, bd.tier,
+          bd.xp_reward, bd.is_secret, bd.display_order
+        FROM student_badges sb
+        JOIN badge_definitions bd ON bd.id = sb.badge_id
+        WHERE sb.student_id = ${studentId}
+        ORDER BY sb.earned_at DESC NULLS LAST, bd.display_order
+      `;
+    } else {
+      return await this.sql`
+        SELECT 
+          sb.*,
+          bd.name, bd.description, bd.icon, bd.category, bd.tier,
+          bd.xp_reward, bd.is_secret, bd.display_order
+        FROM student_badges sb
+        JOIN badge_definitions bd ON bd.id = sb.badge_id
+        WHERE sb.student_id = ${studentId} AND sb.is_earned = true
+        ORDER BY sb.earned_at DESC, bd.display_order
+      `;
+    }
+  }
+
+  // Get badge progress for a specific badge
+  async getBadgeProgress(studentId: number, badgeId: string) {
+    const [progress] = await this.sql`
+      SELECT * FROM student_badges 
+      WHERE student_id = ${studentId} AND badge_id = ${badgeId}
+    `;
+    return progress || null;
+  }
+
+  // Check and award badges based on student activity
+  async checkAndAwardBadges(studentId: number, context: {
+    action: 'problem_completed' | 'streak_achieved' | 'level_up' | 'topic_mastered';
+    metadata?: any;
+  }): Promise<string[]> {
+    const awardedBadges: string[] = [];
+
+    // Get all relevant badge definitions for this student
+    const badges = await this.getBadgeDefinitions({
+      targetRole: 'student',
+      includeSecret: true
+    });
+
+    for (const badge of badges) {
+      try {
+        const shouldAward = await this.evaluateBadgeCriteria(studentId, badge, context);
+        if (shouldAward) {
+          const awarded = await this.awardBadge(studentId, badge.id, context.metadata);
+          if (awarded) {
+            awardedBadges.push(badge.id);
+          }
+        }
+      } catch (error) {
+        console.error(`Error evaluating badge ${badge.id}:`, error);
+      }
+    }
+
+    return awardedBadges;
+  }
+
+  // Evaluate badge criteria (this is where badge logic lives)
+  private async evaluateBadgeCriteria(studentId: number, badge: any, context: any): Promise<boolean> {
+    const criteria = badge.criteria;
+
+    // Check if student already has this badge
+    const existing = await this.getBadgeProgress(studentId, badge.id);
+    if (existing?.is_earned) {
+      return false;
+    }
+
+    switch (criteria.type) {
+      case 'first_problem':
+        return context.action === 'problem_completed';
+
+      case 'streak':
+        if (context.action === 'streak_achieved') {
+          return context.metadata?.days >= criteria.days;
+        }
+        // Also check current streak from database
+        const streakData = await this.sql`
+          SELECT COUNT(*) as streak_days
+          FROM daily_activity 
+          WHERE student_id = ${studentId} 
+          AND activity_date >= CURRENT_DATE - INTERVAL '${criteria.days} days'
+          AND problems_completed > 0
+        `;
+        return streakData[0]?.streak_days >= criteria.days;
+
+      case 'problems_completed':
+        const problemCount = await this.sql`
+          SELECT COUNT(*) as total_problems
+          FROM problem_attempts 
+          WHERE student_id = ${studentId} AND is_correct = true
+        `;
+        return problemCount[0]?.total_problems >= criteria.count;
+
+      case 'topic_mastery':
+        if (context.action === 'topic_mastered') {
+          return context.metadata?.topic === criteria.topic && 
+                 context.metadata?.subject === criteria.subject;
+        }
+        // Check mastery level from database
+        const mastery = await this.sql`
+          SELECT mastery_level FROM topic_mastery 
+          WHERE student_id = ${studentId} 
+          AND subject = ${criteria.subject} 
+          AND topic = ${criteria.topic}
+        `;
+        return mastery[0]?.mastery_level >= (criteria.level || 80);
+
+      case 'level_reached':
+        if (context.action === 'level_up') {
+          return context.metadata?.newLevel >= criteria.level;
+        }
+        // Check current level
+        const xpData = await this.getStudentXP(studentId);
+        return xpData?.level >= criteria.level;
+
+      case 'perfect_score':
+        // Check for recent perfect scores
+        const perfectScores = await this.sql`
+          SELECT COUNT(*) as perfect_count
+          FROM problem_attempts 
+          WHERE student_id = ${studentId} 
+          AND is_correct = true 
+          AND hints_used = 0
+          AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+        `;
+        return perfectScores[0]?.perfect_count >= (criteria.count || 1);
+
+      default:
+        return false;
+    }
+  }
+
   // Close database connection
   async close() {
     await this.sql.end();
