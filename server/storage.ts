@@ -205,11 +205,10 @@ export class DashboardStorage {
 
     if (setClause.length > 0) {
       values.push(sessionId);
-      await this.sql.unsafe(`
-        UPDATE learning_sessions 
-        SET ${setClause.join(', ')}
-        WHERE id = $${values.length}
-      `, values);
+      await this.sql.unsafe(
+        `UPDATE learning_sessions SET ${setClause.join(', ')} WHERE id = $${values.length}`,
+        values as any[]
+      );
     }
   }
 
@@ -292,11 +291,10 @@ export class DashboardStorage {
       if (setClause.length > 0) {
         setClause.push('updated_at = CURRENT_TIMESTAMP');
         values.push(existing[0].id);
-        await this.sql.unsafe(`
-          UPDATE topic_mastery 
-          SET ${setClause.join(', ')}
-          WHERE id = $${values.length}
-        `, values);
+        await this.sql.unsafe(
+          `UPDATE topic_mastery SET ${setClause.join(', ')} WHERE id = $${values.length}`,
+          values as any[]
+        );
       }
     } else {
       // Insert new
@@ -601,8 +599,268 @@ export class DashboardStorage {
     };
   }
 
+  // GAMIFICATION SYSTEM METHODS
+
+  // Check if user can access a specific student
+  async canUserAccessStudent(userId: number, studentId: number): Promise<boolean> {
+    const result = await this.sql`
+      SELECT 1 FROM students s
+      JOIN user_roles ur ON ur.user_id = ${userId}
+      WHERE s.id = ${studentId}
+        AND (ur.role = 'system_admin' 
+          OR (ur.role = 'parent' AND s.parent_id = ${userId})
+          OR (ur.role = 'teacher' AND EXISTS (
+            SELECT 1 FROM class_enrollments ce 
+            JOIN classes c ON c.id = ce.class_id 
+            WHERE ce.student_id = ${studentId} AND c.teacher_id = ${userId}
+          )))
+      LIMIT 1
+    `;
+    return result.length > 0;
+  }
+
+  // Check if user can access a specific class
+  async canUserAccessClass(userId: number, classId: number): Promise<boolean> {
+    const result = await this.sql`
+      SELECT 1 FROM classes c
+      JOIN user_roles ur ON ur.user_id = ${userId}
+      WHERE c.id = ${classId}
+        AND (ur.role = 'system_admin' 
+          OR (ur.role = 'teacher' AND c.teacher_id = ${userId})
+          OR (ur.role = 'school_admin' AND c.school_id = ur.school_id))
+      LIMIT 1
+    `;
+    return result.length > 0;
+  }
+
+  // Get student XP data
+  async getStudentXP(studentId: number) {
+    const result = await this.sql`
+      SELECT * FROM student_xp WHERE student_id = ${studentId}
+    `;
+    return result[0] || null;
+  }
+
+  // Initialize XP tracking for new student
+  async initializeStudentXP(studentId: number) {
+    await this.sql`
+      INSERT INTO student_xp (student_id, total_xp, spent_xp, available_xp, level, weekly_xp, monthly_xp)
+      VALUES (${studentId}, 0, 0, 0, 1, 0, 0)
+      ON CONFLICT (student_id) DO NOTHING
+    `;
+    return this.getStudentXP(studentId);
+  }
+
+  // Earn XP and create transaction
+  async earnXP(studentId: number, transaction: {
+    type: string;
+    amount: number;
+    source: string;
+    description: string;
+    metadata?: any;
+    sessionId?: number;
+  }) {
+    await this.sql.begin(async (sql) => {
+      // Get current XP data
+      const currentXP = await sql`
+        SELECT * FROM student_xp WHERE student_id = ${studentId}
+      `;
+
+      let xpData = currentXP[0];
+      if (!xpData) {
+        // Initialize if not exists
+        await sql`
+          INSERT INTO student_xp (student_id, total_xp, spent_xp, available_xp, level, weekly_xp, monthly_xp)
+          VALUES (${studentId}, 0, 0, 0, 1, 0, 0)
+        `;
+        xpData = { total_xp: 0, spent_xp: 0, available_xp: 0, level: 1, weekly_xp: 0, monthly_xp: 0 };
+      }
+
+      const balanceBefore = xpData.available_xp;
+      const newTotalXP = xpData.total_xp + transaction.amount;
+      const newAvailableXP = xpData.available_xp + transaction.amount;
+      const newWeeklyXP = xpData.weekly_xp + transaction.amount;
+      const newMonthlyXP = xpData.monthly_xp + transaction.amount;
+
+      // Calculate new level
+      const newLevel = this.calculateLevel(newTotalXP);
+
+      // Update XP data
+      await sql`
+        UPDATE student_xp 
+        SET total_xp = ${newTotalXP},
+            available_xp = ${newAvailableXP},
+            level = ${newLevel},
+            weekly_xp = ${newWeeklyXP},
+            monthly_xp = ${newMonthlyXP},
+            last_xp_earned = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE student_id = ${studentId}
+      `;
+
+      // Create transaction record
+      await sql`
+        INSERT INTO xp_transactions (
+          student_id, type, amount, source, description, metadata, 
+          balance_before, balance_after, session_id
+        ) VALUES (
+          ${studentId}, ${transaction.type}, ${transaction.amount}, 
+          ${transaction.source}, ${transaction.description}, ${JSON.stringify(transaction.metadata || {})},
+          ${balanceBefore}, ${newAvailableXP}, ${transaction.sessionId || null}
+        )
+      `;
+    });
+
+    return this.getStudentXP(studentId);
+  }
+
+  // Spend XP and create transaction
+  async spendXP(studentId: number, transaction: {
+    type: string;
+    amount: number;
+    source: string;
+    description: string;
+    metadata?: any;
+  }) {
+    await this.sql.begin(async (sql) => {
+      const currentXP = await sql`
+        SELECT * FROM student_xp WHERE student_id = ${studentId}
+      `;
+
+      if (!currentXP[0]) {
+        throw new Error('Student XP data not found');
+      }
+
+      const xpData = currentXP[0];
+      const balanceBefore = xpData.available_xp;
+      const spentAmount = Math.abs(transaction.amount);
+      
+      if (balanceBefore < spentAmount) {
+        throw new Error('Insufficient XP balance');
+      }
+
+      const newAvailableXP = balanceBefore - spentAmount;
+      const newSpentXP = xpData.spent_xp + spentAmount;
+
+      // Update XP data
+      await sql`
+        UPDATE student_xp 
+        SET available_xp = ${newAvailableXP},
+            spent_xp = ${newSpentXP},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE student_id = ${studentId}
+      `;
+
+      // Create transaction record
+      await sql`
+        INSERT INTO xp_transactions (
+          student_id, type, amount, source, description, metadata, 
+          balance_before, balance_after
+        ) VALUES (
+          ${studentId}, ${transaction.type}, ${-spentAmount}, 
+          ${transaction.source}, ${transaction.description}, ${JSON.stringify(transaction.metadata || {})},
+          ${balanceBefore}, ${newAvailableXP}
+        )
+      `;
+    });
+
+    return this.getStudentXP(studentId);
+  }
+
+  // Get XP transactions for a student
+  async getXPTransactions(studentId: number, limit: number = 50, offset: number = 0) {
+    return await this.sql`
+      SELECT * FROM xp_transactions 
+      WHERE student_id = ${studentId}
+      ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  }
+
+  // Get leaderboard data
+  async getLeaderboard(params: {
+    type: string;
+    scope: string;
+    classId?: number;
+    schoolId?: number;
+    gradeLevel?: string;
+    limit: number;
+  }) {
+    // For now, return weekly XP leaderboard - can be expanded
+    if (params.type === 'weekly_xp' && params.scope === 'class' && params.classId) {
+      return await this.sql`
+        SELECT 
+          sx.student_id,
+          sx.weekly_xp as score,
+          sp.name as student_name,
+          sp.grade
+        FROM student_xp sx
+        JOIN students s ON s.id = sx.student_id
+        JOIN student_profiles sp ON sp.student_id = s.id
+        JOIN class_enrollments ce ON ce.student_id = s.id
+        WHERE ce.class_id = ${params.classId} AND ce.is_active = true
+        ORDER BY sx.weekly_xp DESC
+        LIMIT ${params.limit}
+      `;
+    }
+    
+    return []; // Return empty for unsupported leaderboard types for now
+  }
+
+  // Reset weekly XP for all students
+  async resetWeeklyXP() {
+    await this.sql`
+      UPDATE student_xp SET weekly_xp = 0, updated_at = CURRENT_TIMESTAMP
+    `;
+  }
+
+  // Get XP statistics for dashboard
+  async getXPStats(studentId: number, days: number = 7) {
+    const stats = await this.sql`
+      SELECT 
+        COUNT(*) as total_transactions,
+        SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as total_earned,
+        SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as total_spent,
+        AVG(CASE WHEN amount > 0 THEN amount ELSE NULL END) as avg_earning
+      FROM xp_transactions 
+      WHERE student_id = ${studentId} 
+        AND created_at >= CURRENT_DATE - INTERVAL '${days} days'
+    `;
+
+    const dailyStats = await this.sql`
+      SELECT 
+        DATE(created_at) as date,
+        SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as earned,
+        COUNT(*) as transactions
+      FROM xp_transactions 
+      WHERE student_id = ${studentId} 
+        AND created_at >= CURRENT_DATE - INTERVAL '${days} days'
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    `;
+
+    return {
+      summary: stats[0] || { total_transactions: 0, total_earned: 0, total_spent: 0, avg_earning: 0 },
+      daily: dailyStats
+    };
+  }
+
+  // Helper method to calculate level from total XP
+  private calculateLevel(totalXP: number): number {
+    const thresholds = [0, 100, 250, 500, 1000, 2000, 4000, 8000, 15000, 30000];
+    for (let level = thresholds.length - 1; level >= 0; level--) {
+      if (totalXP >= thresholds[level]) {
+        return level + 1;
+      }
+    }
+    return 1;
+  }
+
   // Close database connection
   async close() {
     await this.sql.end();
   }
 }
+
+// Export storage instance for use in routes
+export const storage = new DashboardStorage();
