@@ -1,5 +1,82 @@
 import { pgTable, serial, varchar, integer, timestamp, decimal, boolean, text, json, unique } from 'drizzle-orm/pg-core';
 
+// Grade Level Definitions for Dual Educational Systems
+// Supports both US grades (K-13) and Caribbean school structure
+export const GRADE_LEVELS = {
+  // US Grade System
+  US_KINDERGARTEN: 'K',
+  US_GRADE_1: 'Grade 1',
+  US_GRADE_2: 'Grade 2', 
+  US_GRADE_3: 'Grade 3',
+  US_GRADE_4: 'Grade 4',
+  US_GRADE_5: 'Grade 5',
+  US_GRADE_6: 'Grade 6',
+  US_GRADE_7: 'Grade 7',
+  US_GRADE_8: 'Grade 8',
+  US_GRADE_9: 'Grade 9',
+  US_GRADE_10: 'Grade 10',
+  US_GRADE_11: 'Grade 11',
+  US_GRADE_12: 'Grade 12',
+  US_GRADE_13: 'Grade 13',
+  
+  // Caribbean School System
+  CARIBBEAN_INFANT_1: 'Infant 1',
+  CARIBBEAN_INFANT_2: 'Infant 2',
+  CARIBBEAN_STANDARD_1: 'Standard 1',
+  CARIBBEAN_STANDARD_2: 'Standard 2',
+  CARIBBEAN_STANDARD_3: 'Standard 3',
+  CARIBBEAN_STANDARD_4: 'Standard 4',
+  CARIBBEAN_STANDARD_5: 'Standard 5', // SEA/11+/PEP exam year
+  CARIBBEAN_FORM_1: 'Form 1',
+  CARIBBEAN_FORM_2: 'Form 2',
+  CARIBBEAN_FORM_3: 'Form 3',
+  CARIBBEAN_FORM_4: 'Form 4', // CSEC prep begins
+  CARIBBEAN_FORM_5: 'Form 5', // CSEC exam year
+  CARIBBEAN_LOWER_6TH: 'Lower 6th Form', // CAPE/A-Levels prep
+  CARIBBEAN_UPPER_6TH: 'Upper 6th Form', // CAPE/A-Levels completion
+} as const;
+
+// Grade Level Mapping between US and Caribbean systems
+export const GRADE_MAPPING = {
+  [GRADE_LEVELS.US_KINDERGARTEN]: GRADE_LEVELS.CARIBBEAN_INFANT_1,
+  [GRADE_LEVELS.US_GRADE_1]: GRADE_LEVELS.CARIBBEAN_INFANT_2,
+  [GRADE_LEVELS.US_GRADE_2]: GRADE_LEVELS.CARIBBEAN_STANDARD_1,
+  [GRADE_LEVELS.US_GRADE_3]: GRADE_LEVELS.CARIBBEAN_STANDARD_2,
+  [GRADE_LEVELS.US_GRADE_4]: GRADE_LEVELS.CARIBBEAN_STANDARD_3,
+  [GRADE_LEVELS.US_GRADE_5]: GRADE_LEVELS.CARIBBEAN_STANDARD_4,
+  [GRADE_LEVELS.US_GRADE_6]: GRADE_LEVELS.CARIBBEAN_STANDARD_5,
+  [GRADE_LEVELS.US_GRADE_7]: GRADE_LEVELS.CARIBBEAN_FORM_1,
+  [GRADE_LEVELS.US_GRADE_8]: GRADE_LEVELS.CARIBBEAN_FORM_2,
+  [GRADE_LEVELS.US_GRADE_9]: GRADE_LEVELS.CARIBBEAN_FORM_3,
+  [GRADE_LEVELS.US_GRADE_10]: GRADE_LEVELS.CARIBBEAN_FORM_4,
+  [GRADE_LEVELS.US_GRADE_11]: GRADE_LEVELS.CARIBBEAN_FORM_5,
+  [GRADE_LEVELS.US_GRADE_12]: GRADE_LEVELS.CARIBBEAN_LOWER_6TH,
+  [GRADE_LEVELS.US_GRADE_13]: GRADE_LEVELS.CARIBBEAN_UPPER_6TH,
+} as const;
+
+// Key Educational Transition Points
+export const TRANSITION_POINTS = {
+  PRIMARY_TO_SECONDARY: [GRADE_LEVELS.CARIBBEAN_STANDARD_5, GRADE_LEVELS.US_GRADE_6], // SEA/11+/PEP exams
+  CSEC_PREPARATION: [GRADE_LEVELS.CARIBBEAN_FORM_4, GRADE_LEVELS.US_GRADE_10], // CSEC prep begins
+  CSEC_COMPLETION: [GRADE_LEVELS.CARIBBEAN_FORM_5, GRADE_LEVELS.US_GRADE_11], // CSEC exams
+  ADVANCED_STUDIES: [GRADE_LEVELS.CARIBBEAN_LOWER_6TH, GRADE_LEVELS.US_GRADE_12], // CAPE/A-Levels
+} as const;
+
+// All valid grade levels (for validation)
+export const ALL_GRADE_LEVELS = Object.values(GRADE_LEVELS);
+
+// Helper function to get equivalent grade level
+export function getEquivalentGrade(gradeLevel: string): string | null {
+  // Check if it's a US grade, return Caribbean equivalent
+  if (gradeLevel in GRADE_MAPPING) {
+    return GRADE_MAPPING[gradeLevel as keyof typeof GRADE_MAPPING];
+  }
+  
+  // Check if it's a Caribbean grade, return US equivalent
+  const usEquivalent = Object.entries(GRADE_MAPPING).find(([, caribbean]) => caribbean === gradeLevel);
+  return usEquivalent ? usEquivalent[0] : null;
+}
+
 // Use existing users table structure - role is being deprecated in favor of user_roles
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -18,7 +95,7 @@ export const students = pgTable('students', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id), // For backward compatibility
   parentId: integer('parent_id').references(() => users.id), 
-  gradeLevel: varchar('grade_level'),
+  gradeLevel: varchar('grade_level'), // Supports both US grades (K, Grade 1-13) and Caribbean levels (Infant 1-2, Standard 1-5, Form 1-6)
   subjects: json('subjects').$type<string[]>(),
   createdAt: timestamp('created_at').defaultNow(),
 });
@@ -187,8 +264,8 @@ export const studentProfiles = pgTable('student_profiles', {
   name: varchar('name').notNull(),
   email: varchar('email'), // Optional email for older children who can create their own accounts
   age: integer('age').notNull(),
-  grade: varchar('grade').notNull(),
-  targetExam: varchar('target_exam').notNull(),
+  grade: varchar('grade').notNull(), // Supports dual educational systems: US grades (K-13) & Caribbean levels (Infant 1-2, Standard 1-5, Form 1-6)
+  targetExam: varchar('target_exam').notNull(), // SEA, 11+, PEP, CSEC, CAPE, A-Levels, etc.
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -211,9 +288,9 @@ export const schools = pgTable('schools', {
 // Classes table - grouping mechanism for students under teachers
 export const classes = pgTable('classes', {
   id: serial('id').primaryKey(),
-  name: varchar('name').notNull(), // e.g., "Grade 7A", "Advanced Math"
+  name: varchar('name').notNull(), // e.g., "Grade 7A", "Form 3B", "Standard 4", "Advanced Math"
   subject: varchar('subject'), // Optional - classes can be subject-specific or general
-  gradeLevel: varchar('grade_level').notNull(),
+  gradeLevel: varchar('grade_level').notNull(), // Dual system support: US grades (K-13) & Caribbean levels (Infant 1-2, Standard 1-5, Form 1-6)
   schoolId: integer('school_id').references(() => schools.id).notNull(), // Classes must belong to a school
   teacherId: integer('teacher_id').references(() => users.id), // Can be null during creation, required before activation
   maxStudents: integer('max_students').default(30),
