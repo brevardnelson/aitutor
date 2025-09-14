@@ -26,7 +26,50 @@ class AuthService {
 
   private getStoredUsers(): any[] {
     const users = localStorage.getItem('caribbeanAI_users');
-    return users ? JSON.parse(users) : [];
+    if (users) {
+      return JSON.parse(users);
+    }
+    
+    // Create demo accounts if no users exist
+    const demoAccounts = this.createDemoAccounts();
+    if (demoAccounts.length > 0) {
+      this.saveUsers(demoAccounts);
+      return demoAccounts;
+    }
+    
+    return [];
+  }
+
+  private createDemoAccounts(): any[] {
+    const demoUsers = [
+      // Students
+      { email: 'emily.student@demo.com', fullName: 'Emily Johnson', role: 'student', password: 'demo123' },
+      { email: 'marcus.student@demo.com', fullName: 'Marcus Williams', role: 'student', password: 'demo123' },
+      { email: 'sophia.student@demo.com', fullName: 'Sophia Garcia', role: 'student', password: 'demo123' },
+      
+      // Parents
+      { email: 'parent.johnson@demo.com', fullName: 'Robert Johnson', role: 'parent', password: 'demo123' },
+      { email: 'parent.williams@demo.com', fullName: 'Lisa Williams', role: 'parent', password: 'demo123' },
+      { email: 'parent.garcia@demo.com', fullName: 'Carlos Garcia', role: 'parent', password: 'demo123' },
+      
+      // Teachers
+      { email: 'teacher.math@demo.com', fullName: 'Dr. Sarah Martinez', role: 'teacher', password: 'demo123' },
+      { email: 'teacher.science@demo.com', fullName: 'Prof. Michael Chen', role: 'teacher', password: 'demo123' },
+      
+      // Admins
+      { email: 'admin.school@demo.com', fullName: 'Principal James Wilson', role: 'school_admin', password: 'demo123' },
+      { email: 'admin.system@demo.com', fullName: 'System Administrator', role: 'system_admin', password: 'demo123' }
+    ];
+
+    return demoUsers.map(user => ({
+      id: this.generateId(),
+      email: user.email,
+      full_name: user.fullName,
+      role: user.role,
+      phone: undefined,
+      is_active: true,
+      password_hash: this.hashPassword(user.password)
+    }));
   }
 
   private saveUsers(users: any[]): void {
