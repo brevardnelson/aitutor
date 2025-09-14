@@ -3,10 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAppContext } from '@/contexts/AppContext';
 import { X, Calculator, BookOpen, Beaker } from 'lucide-react';
+import { GRADE_LEVELS } from '../../../shared/schema';
 
 interface AddChildFormProps {
   onClose: () => void;
@@ -100,8 +101,8 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
               <Input
                 id="age"
                 type="number"
-                min="6"
-                max="18"
+                min="5"
+                max="19"
                 value={formData.age}
                 onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
                 placeholder="Enter age"
@@ -114,20 +115,46 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
               <Label htmlFor="grade">Current Grade</Label>
               <Select onValueChange={(value) => setFormData(prev => ({ ...prev, grade: value }))}>
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select grade" />
+                  <SelectValue placeholder="Select grade level" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grade-1">Grade 1</SelectItem>
-                  <SelectItem value="grade-2">Grade 2</SelectItem>
-                  <SelectItem value="grade-3">Grade 3</SelectItem>
-                  <SelectItem value="grade-4">Grade 4</SelectItem>
-                  <SelectItem value="grade-5">Grade 5</SelectItem>
-                  <SelectItem value="grade-6">Grade 6</SelectItem>
-                  <SelectItem value="grade-7">Grade 7</SelectItem>
-                  <SelectItem value="grade-8">Grade 8</SelectItem>
-                  <SelectItem value="grade-9">Grade 9</SelectItem>
-                  <SelectItem value="grade-10">Grade 10</SelectItem>
-                  <SelectItem value="grade-11">Grade 11</SelectItem>
+                <SelectContent className="max-h-80">
+                  <SelectGroup>
+                    <SelectLabel>US Grade Levels</SelectLabel>
+                    <SelectItem value={GRADE_LEVELS.US_KINDERGARTEN}>Kindergarten (K)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_1}>Grade 1</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_2}>Grade 2</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_3}>Grade 3</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_4}>Grade 4</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_5}>Grade 5</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_6}>Grade 6</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_7}>Grade 7</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_8}>Grade 8</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_9}>Grade 9</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_10}>Grade 10</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_11}>Grade 11</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_12}>Grade 12</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.US_GRADE_13}>Grade 13</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Caribbean Primary School</SelectLabel>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_INFANT_1}>Infant 1 (Age 5-6)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_INFANT_2}>Infant 2 (Age 6-7)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_STANDARD_1}>Standard 1 (Age 7-8)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_STANDARD_2}>Standard 2 (Age 8-9)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_STANDARD_3}>Standard 3 (Age 9-10)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_STANDARD_4}>Standard 4 (Age 10-11)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_STANDARD_5}>Standard 5 - SEA/11+/PEP Year (Age 11-12)</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Caribbean Secondary School</SelectLabel>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_FORM_1}>Form 1 (Age 12-13)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_FORM_2}>Form 2 (Age 13-14)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_FORM_3}>Form 3 (Age 14-15)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_FORM_4}>Form 4 - CSEC Prep (Age 15-16)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_FORM_5}>Form 5 - CSEC Exams (Age 16-17)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_LOWER_6TH}>Lower 6th Form - CAPE/A-Levels (Age 17-18)</SelectItem>
+                    <SelectItem value={GRADE_LEVELS.CARIBBEAN_UPPER_6TH}>Upper 6th Form - Final Year (Age 18-19)</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -138,12 +165,31 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select target exam" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="common-entrance">Common Entrance</SelectItem>
-                  <SelectItem value="sea">SEA (Secondary Entrance Assessment)</SelectItem>
-                  <SelectItem value="high-school-entrance">High School Entrance</SelectItem>
-                  <SelectItem value="placement-test">Placement Test</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                <SelectContent className="max-h-60">
+                  <SelectGroup>
+                    <SelectLabel>Primary to Secondary Transition</SelectLabel>
+                    <SelectItem value="sea">SEA - Secondary Entrance Assessment (T&T)</SelectItem>
+                    <SelectItem value="11-plus">11+ Exam (Barbados)</SelectItem>
+                    <SelectItem value="pep">PEP - Primary Exit Profile (Jamaica)</SelectItem>
+                    <SelectItem value="common-entrance">Common Entrance</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Secondary School Completion</SelectLabel>
+                    <SelectItem value="csec">CSEC - Caribbean Secondary Education Certificate</SelectItem>
+                    <SelectItem value="cxc">CXC Exams</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Advanced Level</SelectLabel>
+                    <SelectItem value="cape">CAPE - Caribbean Advanced Proficiency Exam</SelectItem>
+                    <SelectItem value="a-levels">A-Levels</SelectItem>
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Other</SelectLabel>
+                    <SelectItem value="high-school-entrance">High School Entrance</SelectItem>
+                    <SelectItem value="placement-test">Placement Test</SelectItem>
+                    <SelectItem value="sat">SAT (US College Entrance)</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
