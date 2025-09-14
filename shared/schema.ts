@@ -671,3 +671,378 @@ export const contentTemplates = pgTable('content_templates', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+// GAMIFICATION SYSTEM - XP, Badges, Challenges, Leaderboards, Digital Wallet
+
+// Student XP tracking - points earned from completing problems and activities
+export const studentXP = pgTable('student_xp', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  totalXP: integer('total_xp').default(0), // Total XP earned across all activities
+  spentXP: integer('spent_xp').default(0), // XP spent on rewards/redemptions
+  availableXP: integer('available_xp').default(0), // Current balance for spending
+  level: integer('level').default(1), // Student level based on total XP
+  weeklyXP: integer('weekly_xp').default(0), // XP earned this week (resets weekly)
+  monthlyXP: integer('monthly_xp').default(0), // XP earned this month (resets monthly)
+  lastXPEarned: timestamp('last_xp_earned'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique XP tracking per student
+  uniqueStudentXP: unique().on(table.studentId),
+}));
+
+// XP transactions - detailed log of all XP earning and spending activities
+export const xpTransactions = pgTable('xp_transactions', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  type: varchar('type').notNull(), // 'earned', 'spent', 'bonus', 'penalty'
+  amount: integer('amount').notNull(), // Can be positive (earned) or negative (spent)
+  source: varchar('source').notNull(), // 'problem_completion', 'no_hints_bonus', 'streak_bonus', 'challenge_completion', 'reward_redemption'
+  description: text('description').notNull(), // Human-readable description
+  metadata: json('metadata'), // Additional context (problem_id, challenge_id, etc.)
+  balanceBefore: integer('balance_before').notNull(),
+  balanceAfter: integer('balance_after').notNull(),
+  sessionId: integer('session_id').references(() => learningSessions.id), // Optional link to learning session
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Badge definitions - all available badges in the system
+export const badgeDefinitions = pgTable('badge_definitions', {
+  id: varchar('id').primaryKey(), // e.g., "first_week_streak", "mastery_fractions_beginner"
+  name: varchar('name').notNull(),
+  description: text('description').notNull(),
+  icon: varchar('icon').notNull(), // Icon identifier (emoji or icon name)
+  category: varchar('category').notNull(), // 'achievement', 'mastery', 'streak', 'social', 'special'
+  tier: varchar('tier').notNull(), // 'bronze', 'silver', 'gold', 'platinum', 'diamond'
+  xpReward: integer('xp_reward').default(0), // XP awarded when badge is earned
+  
+  // Criteria for earning the badge (JSON structure for flexibility)
+  criteria: json('criteria').notNull(), // e.g., {"type": "streak", "days": 7} or {"type": "topic_mastery", "subject": "math", "topic": "fractions", "level": "beginner"}
+  
+  // Target audience
+  targetRole: varchar('target_role').notNull(), // 'student', 'teacher', 'parent'
+  gradeLevel: varchar('grade_level'), // Optional - null means available to all grades
+  subject: varchar('subject'), // Optional - null means available to all subjects
+  
+  // Badge rarity and visibility
+  isSecret: boolean('is_secret').default(false), // Hidden until earned
+  isActive: boolean('is_active').default(true),
+  displayOrder: integer('display_order').default(0), // For sorting badge collections
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Student badges - badges earned by students
+export const studentBadges = pgTable('student_badges', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  badgeId: varchar('badge_id').references(() => badgeDefinitions.id).notNull(),
+  progress: decimal('progress').default('0'), // 0-100, for badges with incremental progress
+  isEarned: boolean('is_earned').default(false),
+  earnedAt: timestamp('earned_at'),
+  notificationSent: boolean('notification_sent').default(false), // Track if parent was notified
+  metadata: json('metadata'), // Additional earning context
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  // Unique badge progress per student
+  uniqueStudentBadge: unique().on(table.studentId, table.badgeId),
+}));
+
+// Weekly challenges - system-generated and teacher-created challenges
+export const challenges = pgTable('challenges', {
+  id: serial('id').primaryKey(),
+  title: varchar('title').notNull(),
+  description: text('description').notNull(),
+  type: varchar('type').notNull(), // 'system', 'teacher_created', 'school_wide', 'class_specific'
+  
+  // Challenge parameters
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  targetValue: integer('target_value').notNull(), // e.g., 15 problems, 50% accuracy improvement
+  metric: varchar('metric').notNull(), // 'problems_completed', 'accuracy_improvement', 'streak_days', 'time_spent'
+  
+  // Rewards
+  xpReward: integer('xp_reward').default(0),
+  badgeReward: varchar('badge_reward').references(() => badgeDefinitions.id), // Optional badge for completion
+  
+  // Targeting
+  gradeLevel: varchar('grade_level'), // null = all grades
+  subject: varchar('subject'), // null = all subjects
+  schoolId: integer('school_id').references(() => schools.id), // null = platform-wide
+  classId: integer('class_id').references(() => classes.id), // null = not class-specific
+  createdBy: integer('created_by').references(() => users.id), // Teacher or system (null)
+  
+  // Status
+  isActive: boolean('is_active').default(true),
+  maxParticipants: integer('max_participants'), // null = unlimited
+  currentParticipants: integer('current_participants').default(0),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Challenge participation and progress tracking
+export const challengeParticipation = pgTable('challenge_participation', {
+  id: serial('id').primaryKey(),
+  challengeId: integer('challenge_id').references(() => challenges.id).notNull(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  
+  // Progress tracking
+  currentValue: integer('current_value').default(0), // Current progress toward target
+  isCompleted: boolean('is_completed').default(false),
+  completedAt: timestamp('completed_at'),
+  
+  // Performance metrics
+  startingBaseline: integer('starting_baseline'), // Starting value for improvement-based challenges
+  progressHistory: json('progress_history').$type<Array<{date: string, value: number}>>().default([]),
+  
+  // Rewards status
+  xpAwarded: boolean('xp_awarded').default(false),
+  badgeAwarded: boolean('badge_awarded').default(false),
+  
+  joinedAt: timestamp('joined_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique participation per student per challenge
+  uniqueChallengeParticipation: unique().on(table.studentId, table.challengeId),
+}));
+
+// Leaderboards - class-based weekly leaderboards with fair competition
+export const leaderboards = pgTable('leaderboards', {
+  id: serial('id').primaryKey(),
+  type: varchar('type').notNull(), // 'weekly_xp', 'monthly_accuracy', 'challenge_completion', 'streak_leaders'
+  scope: varchar('scope').notNull(), // 'class', 'grade', 'school', 'global'
+  
+  // Scope identifiers
+  classId: integer('class_id').references(() => classes.id), // for class-based leaderboards
+  schoolId: integer('school_id').references(() => schools.id), // for school-based leaderboards
+  gradeLevel: varchar('grade_level'), // for grade-based leaderboards
+  
+  // Time period
+  periodType: varchar('period_type').notNull(), // 'weekly', 'monthly', 'all_time'
+  periodStart: timestamp('period_start').notNull(),
+  periodEnd: timestamp('period_end').notNull(),
+  
+  // Status
+  isActive: boolean('is_active').default(true),
+  isCurrent: boolean('is_current').default(false), // Only one current leaderboard per type/scope
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique current leaderboard per type/scope
+  uniqueCurrentLeaderboard: unique().on(table.type, table.scope, table.classId, table.schoolId, table.gradeLevel, table.isCurrent),
+}));
+
+// Leaderboard entries - student rankings for each leaderboard
+export const leaderboardEntries = pgTable('leaderboard_entries', {
+  id: serial('id').primaryKey(),
+  leaderboardId: integer('leaderboard_id').references(() => leaderboards.id).notNull(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  rank: integer('rank').notNull(),
+  score: integer('score').notNull(), // XP, accuracy percentage, or other metric
+  previousRank: integer('previous_rank'), // Rank from previous period for comparison
+  trendDirection: varchar('trend_direction'), // 'up', 'down', 'same', 'new'
+  
+  // Additional metrics for rich leaderboard display
+  metadata: json('metadata'), // Additional context (streak length, problems completed, etc.)
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique student per leaderboard
+  uniqueLeaderboardStudent: unique().on(table.leaderboardId, table.studentId),
+}));
+
+// Digital wallet and rewards system
+export const studentWallets = pgTable('student_wallets', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  
+  // Stripe integration fields
+  stripeCustomerId: varchar('stripe_customer_id'), // For future payment processing
+  
+  // Wallet balances
+  pointBalance: integer('point_balance').default(0), // Current redeemable points (linked to availableXP)
+  lifetimeEarnings: integer('lifetime_earnings').default(0), // Total points ever earned
+  totalRedeemed: integer('total_redeemed').default(0), // Total points spent on rewards
+  
+  // Wallet status
+  isActive: boolean('is_active').default(true),
+  isSuspended: boolean('is_suspended').default(false), // For moderation
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique wallet per student
+  uniqueStudentWallet: unique().on(table.studentId),
+}));
+
+// Reward catalog - items students can redeem with points
+export const rewardCatalog = pgTable('reward_catalog', {
+  id: serial('id').primaryKey(),
+  name: varchar('name').notNull(),
+  description: text('description').notNull(),
+  category: varchar('category').notNull(), // 'digital', 'physical', 'experience', 'privilege'
+  subcategory: varchar('subcategory'), // 'stickers', 'books', 'gift_cards', 'extra_time', etc.
+  
+  // Pricing and availability
+  pointCost: integer('point_cost').notNull(),
+  stockQuantity: integer('stock_quantity'), // null = unlimited
+  availableQuantity: integer('available_quantity'), // Current available stock
+  
+  // Eligibility
+  minLevel: integer('min_level').default(1), // Minimum student level required
+  maxRedemptionsPerStudent: integer('max_redemptions_per_student'), // null = unlimited
+  gradeLevel: varchar('grade_level'), // null = all grades
+  schoolId: integer('school_id').references(() => schools.id), // null = platform-wide
+  
+  // Media and display
+  imageUrl: varchar('image_url'),
+  icon: varchar('icon'),
+  displayOrder: integer('display_order').default(0),
+  
+  // Status
+  isActive: boolean('is_active').default(true),
+  isPromoted: boolean('is_promoted').default(false), // Featured rewards
+  
+  // Merchant integration (for future e-commerce)
+  externalSku: varchar('external_sku'), // SKU for external fulfillment
+  fulfillmentType: varchar('fulfillment_type').default('manual'), // 'manual', 'digital', 'shipping'
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Reward redemptions - tracking student purchases
+export const rewardRedemptions = pgTable('reward_redemptions', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  rewardId: integer('reward_id').references(() => rewardCatalog.id).notNull(),
+  
+  // Transaction details
+  pointsSpent: integer('points_spent').notNull(),
+  quantity: integer('quantity').default(1),
+  
+  // Fulfillment tracking
+  status: varchar('status').default('pending'), // 'pending', 'approved', 'fulfilled', 'shipped', 'delivered', 'cancelled'
+  fulfillmentNotes: text('fulfillment_notes'),
+  trackingNumber: varchar('tracking_number'),
+  
+  // Approval workflow (for physical rewards)
+  approvedBy: integer('approved_by').references(() => users.id), // Parent or teacher approval
+  approvedAt: timestamp('approved_at'),
+  
+  // Stripe payment integration (for cash-equivalent rewards)
+  stripePaymentIntentId: varchar('stripe_payment_intent_id'),
+  
+  redeemedAt: timestamp('redeemed_at').defaultNow(),
+  fulfilledAt: timestamp('fulfilled_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Teacher badges and achievements
+export const teacherAchievements = pgTable('teacher_achievements', {
+  id: serial('id').primaryKey(),
+  teacherId: integer('teacher_id').references(() => users.id).notNull(),
+  type: varchar('type').notNull(), // 'class_completion', 'student_improvement', 'engagement', 'innovation'
+  title: varchar('title').notNull(),
+  description: text('description').notNull(),
+  badgeIcon: varchar('badge_icon').notNull(),
+  
+  // Achievement criteria met
+  metric: varchar('metric').notNull(), // 'all_students_completed_challenge', 'class_avg_improvement', 'student_engagement_rate'
+  threshold: decimal('threshold').notNull(), // Required value to earn achievement
+  actualValue: decimal('actual_value').notNull(), // Achieved value
+  
+  // Context
+  classId: integer('class_id').references(() => classes.id),
+  challengeId: integer('challenge_id').references(() => challenges.id),
+  periodStart: timestamp('period_start').notNull(),
+  periodEnd: timestamp('period_end').notNull(),
+  
+  earnedAt: timestamp('earned_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Parent badges and engagement tracking
+export const parentEngagement = pgTable('parent_engagement', {
+  id: serial('id').primaryKey(),
+  parentId: integer('parent_id').references(() => users.id).notNull(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  
+  // Engagement metrics
+  totalLogins: integer('total_logins').default(0),
+  lastLogin: timestamp('last_login'),
+  goalsSet: integer('goals_set').default(0),
+  goalsCompleted: integer('goals_completed').default(0),
+  rewardsApproved: integer('rewards_approved').default(0),
+  notificationsViewed: integer('notifications_viewed').default(0),
+  
+  // Engagement score calculation
+  engagementScore: decimal('engagement_score').default('0'), // 0-100 based on activity
+  engagementLevel: varchar('engagement_level').default('new'), // 'new', 'active', 'super_parent', 'champion'
+  
+  // Weekly/monthly tracking
+  weeklyLogins: integer('weekly_logins').default(0),
+  monthlyLogins: integer('monthly_logins').default(0),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  // Unique engagement tracking per parent-student pair
+  uniqueParentStudent: unique().on(table.parentId, table.studentId),
+}));
+
+// Parent achievements and badges
+export const parentAchievements = pgTable('parent_achievements', {
+  id: serial('id').primaryKey(),
+  parentId: integer('parent_id').references(() => users.id).notNull(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  type: varchar('type').notNull(), // 'goal_setter', 'supportive_parent', 'reward_manager', 'engagement_champion'
+  title: varchar('title').notNull(),
+  description: text('description').notNull(),
+  badgeIcon: varchar('badge_icon').notNull(),
+  
+  // Achievement context
+  metric: varchar('metric').notNull(), // 'goals_completed', 'login_streak', 'rewards_managed'
+  threshold: decimal('threshold').notNull(),
+  actualValue: decimal('actual_value').notNull(),
+  
+  earnedAt: timestamp('earned_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Notification system for achievements and milestones
+export const gamificationNotifications = pgTable('gamification_notifications', {
+  id: serial('id').primaryKey(),
+  recipientId: integer('recipient_id').references(() => users.id).notNull(),
+  recipientType: varchar('recipient_type').notNull(), // 'student', 'parent', 'teacher'
+  
+  // Notification details
+  type: varchar('type').notNull(), // 'badge_earned', 'level_up', 'challenge_completed', 'leaderboard_rank', 'reward_available'
+  title: varchar('title').notNull(),
+  message: text('message').notNull(),
+  icon: varchar('icon'),
+  
+  // Related entities
+  studentId: integer('student_id').references(() => students.id), // For parent/teacher notifications about students
+  badgeId: varchar('badge_id').references(() => badgeDefinitions.id),
+  challengeId: integer('challenge_id').references(() => challenges.id),
+  leaderboardId: integer('leaderboard_id').references(() => leaderboards.id),
+  
+  // Notification status
+  isRead: boolean('is_read').default(false),
+  readAt: timestamp('read_at'),
+  priority: varchar('priority').default('normal'), // 'low', 'normal', 'high', 'urgent'
+  
+  // Delivery tracking
+  emailSent: boolean('email_sent').default(false),
+  pushSent: boolean('push_sent').default(false),
+  
+  createdAt: timestamp('created_at').defaultNow(),
+  expiresAt: timestamp('expires_at'), // Auto-expire old notifications
+});
