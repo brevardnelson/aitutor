@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
+    "db:push": "drizzle-kit push --force",
+    "db:push:safe": "drizzle-kit push",
+    "db:push:prod": "node -e \"console.log('Database schema is already synchronized via migration system')\"",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

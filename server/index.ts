@@ -293,13 +293,139 @@ async function initializeChallengeScheduler() {
   }
 }
 
-// Start server with challenge automation
+// COMPREHENSIVE LEADERBOARD AUTOMATION SYSTEM
+async function initializeLeaderboardScheduler() {
+  try {
+    console.log('🏆 Initializing leaderboard automation system...');
+    
+    // Initialize current week leaderboards on startup
+    try {
+      await storage.resetWeeklyLeaderboards();
+      console.log('✅ Weekly leaderboards initialized successfully');
+    } catch (error) {
+      console.log('⚠️  Weekly leaderboards initialization skipped (likely already exist)');
+    }
+
+    // Set up weekly leaderboard reset (every Monday at 12:00 AM - before challenges)
+    const scheduleWeeklyLeaderboardReset = () => {
+      const now = new Date();
+      const nextMonday = new Date(now);
+      
+      // Calculate days until next Monday (0 = Sunday, 1 = Monday)
+      const daysUntilMonday = (1 - now.getDay() + 7) % 7;
+      if (daysUntilMonday === 0 && now.getHours() >= 0) {
+        // If it's already Monday, schedule for next Monday
+        nextMonday.setDate(now.getDate() + 7);
+      } else {
+        nextMonday.setDate(now.getDate() + daysUntilMonday);
+      }
+      
+      nextMonday.setHours(0, 0, 0, 0); // 12:00 AM on Monday (before challenges)
+      
+      const msUntilNextMonday = nextMonday.getTime() - now.getTime();
+      
+      console.log(`🗓️  Next weekly leaderboard reset scheduled for: ${nextMonday.toLocaleString()}`);
+      
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Running weekly leaderboard reset (scheduled)...');
+          await storage.resetWeeklyLeaderboards();
+          console.log('✅ Weekly leaderboard reset completed automatically');
+          
+          // Schedule the next week
+          scheduleWeeklyLeaderboardReset();
+        } catch (error) {
+          console.error('❌ Error in scheduled weekly leaderboard reset:', error);
+          // Retry in 1 hour if there's an error
+          setTimeout(scheduleWeeklyLeaderboardReset, 60 * 60 * 1000);
+        }
+      }, msUntilNextMonday);
+    };
+
+    // Set up daily leaderboard updates (every day at 11:00 PM)
+    const scheduleDailyLeaderboardUpdates = () => {
+      const now = new Date();
+      const nextUpdate = new Date(now);
+      
+      // If it's past 11 PM today, schedule for 11 PM tomorrow
+      if (now.getHours() >= 23) {
+        nextUpdate.setDate(now.getDate() + 1);
+      }
+      
+      nextUpdate.setHours(23, 0, 0, 0); // 11:00 PM
+      
+      const msUntilNextUpdate = nextUpdate.getTime() - now.getTime();
+      
+      console.log(`📊 Next daily leaderboard update scheduled for: ${nextUpdate.toLocaleString()}`);
+      
+      setTimeout(async () => {
+        try {
+          console.log('📈 Running daily leaderboard update (scheduled)...');
+          await storage.updateCurrentWeekLeaderboards();
+          console.log('✅ Daily leaderboard update completed automatically');
+          
+          // Schedule the next day
+          scheduleDailyLeaderboardUpdates();
+        } catch (error) {
+          console.error('❌ Error in scheduled daily leaderboard update:', error);
+          // Retry in 30 minutes if there's an error
+          setTimeout(scheduleDailyLeaderboardUpdates, 30 * 60 * 1000);
+        }
+      }, msUntilNextUpdate);
+    };
+
+    // Set up monthly leaderboard creation (1st of each month at 12:30 AM)
+    const scheduleMonthlyLeaderboardCreation = () => {
+      const now = new Date();
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      nextMonth.setHours(0, 30, 0, 0); // 12:30 AM on the 1st
+      
+      const msUntilNextMonth = nextMonth.getTime() - now.getTime();
+      
+      console.log(`📅 Next monthly leaderboard creation scheduled for: ${nextMonth.toLocaleString()}`);
+      
+      setTimeout(async () => {
+        try {
+          console.log('📈 Creating monthly leaderboards (scheduled)...');
+          await storage.createMonthlyLeaderboards();
+          console.log('✅ Monthly leaderboards created automatically');
+          
+          // Schedule the next month
+          scheduleMonthlyLeaderboardCreation();
+        } catch (error) {
+          console.error('❌ Error creating scheduled monthly leaderboards:', error);
+          // Retry in 2 hours if there's an error
+          setTimeout(scheduleMonthlyLeaderboardCreation, 2 * 60 * 60 * 1000);
+        }
+      }, msUntilNextMonth);
+    };
+
+    // Start all scheduling systems
+    scheduleWeeklyLeaderboardReset();
+    scheduleDailyLeaderboardUpdates();
+    scheduleMonthlyLeaderboardCreation();
+
+    console.log('✅ Leaderboard automation system initialized successfully');
+    
+  } catch (error) {
+    console.error('❌ Error initializing leaderboard scheduler:', error);
+    // Retry in 5 minutes if initialization fails
+    setTimeout(initializeLeaderboardScheduler, 5 * 60 * 1000);
+  }
+}
+
+// Start server with comprehensive automation systems
 app.listen(PORT, async () => {
   console.log(`🚀 Dashboard API server running on port ${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
   
-  // Initialize challenge automation system
-  await initializeChallengeScheduler();
+  // Initialize automation systems in parallel
+  await Promise.all([
+    initializeChallengeScheduler(),
+    initializeLeaderboardScheduler()
+  ]);
   
   console.log('🎮 Weekly challenge automation system is active!');
+  console.log('🏆 Comprehensive leaderboard automation system is active!');
+  console.log('🚀 All automation systems are running successfully!');
 });

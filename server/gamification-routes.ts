@@ -549,17 +549,325 @@ export function registerGamificationRoutes(app: Express): void {
     }
   });
 
-  // Get leaderboard for class/school
+  // ================================================================================
+  // COMPREHENSIVE LEADERBOARD API ENDPOINTS
+  // ================================================================================
+
+  // Get comprehensive leaderboards with filtering and pagination
+  app.get('/api/gamification/leaderboards', authenticateToken, async (req, res) => {
+    try {
+      const { 
+        type = 'weekly_xp', 
+        scope = 'class', 
+        classId, 
+        schoolId, 
+        gradeLevel, 
+        limit = 20, 
+        offset = 0 
+      } = req.query;
+
+      // Validate parameters
+      const validTypes = ['weekly_xp', 'monthly_accuracy', 'challenge_completion', 'streak_leaders', 'badge_count'];
+      const validScopes = ['class', 'grade', 'school'];
+
+      if (!validTypes.includes(type as string)) {
+        return res.status(400).json({ error: `Invalid leaderboard type. Must be one of: ${validTypes.join(', ')}` });
+      }
+
+      if (!validScopes.includes(scope as string)) {
+        return res.status(400).json({ error: `Invalid leaderboard scope. Must be one of: ${validScopes.join(', ')}` });
+      }
+
+      // Check access permissions based on scope
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      // CRITICAL SECURITY FIX: Enforce proper scoping requirements and access checks
+      if (scope === 'class') {
+        if (!classId) {
+          return res.status(400).json({ error: 'classId is required when scope is "class"' });
+        }
+        const hasAccess = await storage.canUserAccessClass(req.user.id, parseInt(classId as string));
+        if (!hasAccess && !req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - cannot view this class leaderboard' });
+        }
+      }
+      
+      if (scope === 'school') {
+        if (!schoolId) {
+          return res.status(400).json({ error: 'schoolId is required when scope is "school"' });
+        }
+        // Add school access check if method exists
+        // const hasAccess = await storage.canUserAccessSchool(req.user.id, parseInt(schoolId as string));
+        // For now, only system admins can access school-wide leaderboards
+        if (!req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - school leaderboards require admin access' });
+        }
+      }
+      
+      if (scope === 'grade') {
+        if (!gradeLevel) {
+          return res.status(400).json({ error: 'gradeLevel is required when scope is "grade"' });
+        }
+        // Grade leaderboards also require admin access for now
+        if (!req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - grade leaderboards require admin access' });
+        }
+      }
+
+      const leaderboard = await storage.getLeaderboard({
+        type: type as any,
+        scope: scope as any,
+        classId: classId ? parseInt(classId as string) : undefined,
+        schoolId: schoolId ? parseInt(schoolId as string) : undefined,
+        gradeLevel: gradeLevel as string,
+        limit: Math.min(parseInt(limit as string), 100),
+        offset: parseInt(offset as string)
+      });
+
+      res.json({
+        type,
+        scope,
+        classId: classId ? parseInt(classId as string) : null,
+        schoolId: schoolId ? parseInt(schoolId as string) : null,
+        gradeLevel: gradeLevel || null,
+        entries: leaderboard,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+          total: leaderboard.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching leaderboards:', error);
+      res.status(500).json({ error: 'Failed to fetch leaderboards' });
+    }
+  });
+
+  // Get specific leaderboard entries by leaderboard ID
+  app.get('/api/gamification/leaderboards/:leaderboardId/entries', authenticateToken, async (req, res) => {
+    try {
+      const leaderboardId = parseInt(req.params.leaderboardId);
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      if (!leaderboardId) {
+        return res.status(400).json({ error: 'Invalid leaderboard ID' });
+      }
+
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // CRITICAL FIX: Use proper getLeaderboardById method instead of broken getLeaderboardHistory
+      const targetLeaderboard = await storage.getLeaderboardById(leaderboardId);
+      
+      if (!targetLeaderboard) {
+        return res.status(404).json({ error: 'Leaderboard not found' });
+      }
+
+      // Check access permissions
+      if (targetLeaderboard.scope === 'class' && targetLeaderboard.class_id) {
+        const hasAccess = await storage.canUserAccessClass(req.user.id, targetLeaderboard.class_id);
+        if (!hasAccess && !req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - cannot view this leaderboard' });
+        }
+      }
+
+      // Get entries using the existing getLeaderboard method with leaderboardId parameter
+      const entries = await storage.getLeaderboard({
+        type: targetLeaderboard.type as any, // Use actual type from leaderboard
+        scope: targetLeaderboard.scope as any, // Use actual scope from leaderboard
+        limit,
+        offset,
+        leaderboardId
+      });
+
+      res.json({
+        leaderboard: targetLeaderboard,
+        entries,
+        pagination: {
+          limit,
+          offset,
+          total: entries.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching leaderboard entries:', error);
+      res.status(500).json({ error: 'Failed to fetch leaderboard entries' });
+    }
+  });
+
+  // Get student's leaderboard positions across all leaderboards
+  app.get('/api/gamification/students/:studentId/leaderboard-positions', authenticateToken, async (req, res) => {
+    try {
+      const studentId = parseInt(req.params.studentId);
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+      if (!studentId) {
+        return res.status(400).json({ error: 'Invalid student ID' });
+      }
+
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Check if user has access to this student
+      if (!req.user.hasRole('system_admin') && !await storage.canUserAccessStudent(req.user.id, studentId)) {
+        return res.status(403).json({ error: 'Access denied - cannot view this student\'s leaderboard positions' });
+      }
+
+      const positions = await storage.getStudentLeaderboardPositions(studentId, limit);
+
+      // Enhance with additional context
+      const enhancedPositions = positions.map(pos => ({
+        ...pos,
+        period: {
+          start: pos.period_start,
+          end: pos.period_end,
+          duration: Math.ceil((new Date(pos.period_end).getTime() - new Date(pos.period_start).getTime()) / (1000 * 60 * 60 * 24))
+        },
+        trend: {
+          direction: pos.trend_direction,
+          change: pos.previous_rank ? pos.previous_rank - pos.rank : 0
+        }
+      }));
+
+      res.json({
+        studentId,
+        positions: enhancedPositions,
+        summary: {
+          total_positions: positions.length,
+          best_rank: positions.length > 0 ? Math.min(...positions.map(p => p.rank)) : null,
+          recent_trend: positions.length > 0 ? positions[0].trend_direction : null
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching student leaderboard positions:', error);
+      res.status(500).json({ error: 'Failed to fetch student leaderboard positions' });
+    }
+  });
+
+  // Get leaderboard history with filtering
+  app.get('/api/gamification/leaderboards/history', authenticateToken, async (req, res) => {
+    try {
+      const { 
+        type, 
+        scope, 
+        classId, 
+        schoolId, 
+        gradeLevel, 
+        limit = 20 
+      } = req.query;
+
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Validate optional type and scope parameters
+      if (type) {
+        const validTypes = ['weekly_xp', 'monthly_accuracy', 'challenge_completion', 'streak_leaders', 'badge_count'];
+        if (!validTypes.includes(type as string)) {
+          return res.status(400).json({ error: `Invalid leaderboard type. Must be one of: ${validTypes.join(', ')}` });
+        }
+      }
+
+      if (scope) {
+        const validScopes = ['class', 'grade', 'school'];
+        if (!validScopes.includes(scope as string)) {
+          return res.status(400).json({ error: `Invalid leaderboard scope. Must be one of: ${validScopes.join(', ')}` });
+        }
+      }
+
+      // CRITICAL SECURITY FIX: Check access permissions for class-specific requests
+      if (scope === 'class') {
+        if (!classId) {
+          return res.status(400).json({ error: 'classId is required when scope is "class"' });
+        }
+        const hasAccess = await storage.canUserAccessClass(req.user.id, parseInt(classId as string));
+        if (!hasAccess && !req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - cannot view this class leaderboard history' });
+        }
+      }
+      
+      if (scope === 'school') {
+        if (!schoolId) {
+          return res.status(400).json({ error: 'schoolId is required when scope is "school"' });
+        }
+        if (!req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - school leaderboard history requires admin access' });
+        }
+      }
+      
+      if (scope === 'grade') {
+        if (!gradeLevel) {
+          return res.status(400).json({ error: 'gradeLevel is required when scope is "grade"' });
+        }
+        if (!req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - grade leaderboard history requires admin access' });
+        }
+      }
+
+      const history = await storage.getLeaderboardHistory({
+        type: type as string,
+        scope: scope as string,
+        classId: classId ? parseInt(classId as string) : undefined,
+        schoolId: schoolId ? parseInt(schoolId as string) : undefined,
+        gradeLevel: gradeLevel as string,
+        limit: Math.min(parseInt(limit as string), 100)
+      });
+
+      // Enhance history with additional context
+      const enhancedHistory = history.map(item => ({
+        ...item,
+        period: {
+          start: item.period_start,
+          end: item.period_end,
+          duration: Math.ceil((new Date(item.period_end).getTime() - new Date(item.period_start).getTime()) / (1000 * 60 * 60 * 24))
+        },
+        status: {
+          is_current: item.is_current,
+          is_active: item.is_active,
+          has_entries: item.entries_count > 0
+        }
+      }));
+
+      res.json({
+        filters: {
+          type: type || null,
+          scope: scope || null,
+          classId: classId ? parseInt(classId as string) : null,
+          schoolId: schoolId ? parseInt(schoolId as string) : null,
+          gradeLevel: gradeLevel || null
+        },
+        history: enhancedHistory,
+        meta: {
+          total_returned: history.length,
+          has_current: history.some(h => h.is_current),
+          date_range: history.length > 0 ? {
+            earliest: history[history.length - 1].period_start,
+            latest: history[0].period_end
+          } : null
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching leaderboard history:', error);
+      res.status(500).json({ error: 'Failed to fetch leaderboard history' });
+    }
+  });
+
+  // Legacy endpoint - maintained for backward compatibility
   app.get('/api/gamification/leaderboard', authenticateToken, async (req, res) => {
     try {
       const { type = 'weekly_xp', scope = 'class', classId, schoolId, gradeLevel, limit = 10 } = req.query;
 
       // Validate parameters
-      if (!['weekly_xp', 'monthly_accuracy', 'streak_leaders'].includes(type as string)) {
+      if (!['weekly_xp', 'monthly_accuracy', 'challenge_completion', 'streak_leaders', 'badge_count'].includes(type as string)) {
         return res.status(400).json({ error: 'Invalid leaderboard type' });
       }
 
-      if (!['class', 'grade', 'school', 'global'].includes(scope as string)) {
+      if (!['class', 'grade', 'school'].includes(scope as string)) {
         return res.status(400).json({ error: 'Invalid leaderboard scope' });
       }
 
@@ -568,16 +876,38 @@ export function registerGamificationRoutes(app: Express): void {
         return res.status(401).json({ error: 'Authentication required' });
       }
       
-      if (scope === 'class' && classId) {
+      // CRITICAL SECURITY FIX: Enforce proper scoping for class access
+      if (scope === 'class') {
+        if (!classId) {
+          return res.status(400).json({ error: 'classId is required when scope is "class"' });
+        }
         const hasAccess = await storage.canUserAccessClass(req.user.id, parseInt(classId as string));
         if (!hasAccess && !req.user.hasRole('system_admin')) {
-          return res.status(403).json({ error: 'Access denied' });
+          return res.status(403).json({ error: 'Access denied - cannot view this class leaderboard' });
+        }
+      }
+      
+      if (scope === 'school') {
+        if (!schoolId) {
+          return res.status(400).json({ error: 'schoolId is required when scope is "school"' });
+        }
+        if (!req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - school leaderboards require admin access' });
+        }
+      }
+      
+      if (scope === 'grade') {
+        if (!gradeLevel) {
+          return res.status(400).json({ error: 'gradeLevel is required when scope is "grade"' });
+        }
+        if (!req.user.hasRole('system_admin')) {
+          return res.status(403).json({ error: 'Access denied - grade leaderboards require admin access' });
         }
       }
 
       const leaderboard = await storage.getLeaderboard({
-        type: type as string,
-        scope: scope as string,
+        type: type as any,
+        scope: scope as any,
         classId: classId ? parseInt(classId as string) : undefined,
         schoolId: schoolId ? parseInt(schoolId as string) : undefined,
         gradeLevel: gradeLevel as string,

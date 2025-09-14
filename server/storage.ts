@@ -932,34 +932,694 @@ export class DashboardStorage {
     `;
   }
 
-  // Get leaderboard data
+  // ================================================================================
+  // COMPREHENSIVE LEADERBOARD SYSTEM - Supports all leaderboard types and scopes
+  // ================================================================================
+
+  // Calculate rankings for different leaderboard types
+  async calculateLeaderboardRankings(params: {
+    type: 'weekly_xp' | 'monthly_accuracy' | 'challenge_completion' | 'streak_leaders' | 'badge_count';
+    scope: 'class' | 'grade' | 'school';
+    classId?: number;
+    schoolId?: number;
+    gradeLevel?: string;
+    periodStart: Date;
+    periodEnd: Date;
+  }) {
+    const { type, scope, classId, schoolId, gradeLevel, periodStart, periodEnd } = params;
+
+    // Base WHERE conditions for scope filtering
+    let scopeConditions = '';
+    let scopeJoins = '';
+    
+    if (scope === 'class' && classId) {
+      scopeJoins = 'JOIN class_enrollments ce ON ce.student_id = s.id';
+      scopeConditions = `AND ce.class_id = ${classId} AND ce.is_active = true`;
+    } else if (scope === 'grade' && gradeLevel) {
+      scopeJoins = 'JOIN student_profiles sp2 ON sp2.student_id = s.id';
+      scopeConditions = `AND sp2.grade = '${gradeLevel}'`;
+    } else if (scope === 'school' && schoolId) {
+      scopeJoins = `
+        JOIN class_enrollments ce ON ce.student_id = s.id 
+        JOIN classes cl ON cl.id = ce.class_id
+      `;
+      scopeConditions = `AND cl.school_id = ${schoolId} AND ce.is_active = true`;
+    }
+
+    // Calculate rankings based on leaderboard type
+    switch (type) {
+      case 'weekly_xp':
+        return await this.sql.unsafe(`
+          SELECT 
+            ROW_NUMBER() OVER (ORDER BY sx.weekly_xp DESC) as rank,
+            s.id as student_id,
+            sx.weekly_xp as score,
+            sp.name as student_name,
+            sp.grade,
+            sp.avatar_url
+          FROM students s
+          JOIN student_profiles sp ON sp.student_id = s.id
+          JOIN student_xp sx ON sx.student_id = s.id
+          ${scopeJoins}
+          WHERE sx.weekly_xp > 0 ${scopeConditions}
+          ORDER BY sx.weekly_xp DESC
+        `);
+
+      case 'monthly_accuracy':
+        return await this.sql.unsafe(`
+          WITH monthly_stats AS (
+            SELECT 
+              pa.student_id,
+              ROUND(AVG(CASE WHEN pa.is_correct THEN 100.0 ELSE 0.0 END), 2) as accuracy_rate,
+              COUNT(*) as total_attempts
+            FROM problem_attempts pa
+            JOIN students s ON s.id = pa.student_id
+            ${scopeJoins}
+            WHERE pa.timestamp >= '${periodStart.toISOString()}' 
+              AND pa.timestamp <= '${periodEnd.toISOString()}'
+              AND pa.is_completed = true
+              ${scopeConditions}
+            GROUP BY pa.student_id
+            HAVING COUNT(*) >= 10
+          )
+          SELECT 
+            ROW_NUMBER() OVER (ORDER BY ms.accuracy_rate DESC, ms.total_attempts DESC) as rank,
+            s.id as student_id,
+            ms.accuracy_rate as score,
+            sp.name as student_name,
+            sp.grade,
+            sp.avatar_url,
+            ms.total_attempts as metadata
+          FROM monthly_stats ms
+          JOIN students s ON s.id = ms.student_id
+          JOIN student_profiles sp ON sp.student_id = s.id
+          ORDER BY ms.accuracy_rate DESC, ms.total_attempts DESC
+        `);
+
+      case 'challenge_completion':
+        return await this.sql.unsafe(`
+          WITH challenge_stats AS (
+            SELECT 
+              cp.student_id,
+              COUNT(CASE WHEN cp.is_completed THEN 1 END) as completed_challenges,
+              COUNT(*) as total_joined
+            FROM challenge_participation cp
+            JOIN challenges ch ON ch.id = cp.challenge_id
+            JOIN students s ON s.id = cp.student_id
+            ${scopeJoins}
+            WHERE ch.start_date >= '${periodStart.toISOString()}' 
+              AND ch.end_date <= '${periodEnd.toISOString()}'
+              ${scopeConditions}
+            GROUP BY cp.student_id
+          )
+          SELECT 
+            ROW_NUMBER() OVER (ORDER BY cs.completed_challenges DESC, cs.total_joined DESC) as rank,
+            s.id as student_id,
+            cs.completed_challenges as score,
+            sp.name as student_name,
+            sp.grade,
+            sp.avatar_url,
+            cs.total_joined as metadata
+          FROM challenge_stats cs
+          JOIN students s ON s.id = cs.student_id
+          JOIN student_profiles sp ON sp.student_id = s.id
+          WHERE cs.completed_challenges > 0
+          ORDER BY cs.completed_challenges DESC, cs.total_joined DESC
+        `);
+
+      case 'streak_leaders':
+        return await this.sql.unsafe(`
+          WITH current_streaks AS (
+            SELECT 
+              da.student_id,
+              COUNT(*) as current_streak
+            FROM daily_activity da
+            JOIN students s ON s.id = da.student_id
+            ${scopeJoins}
+            WHERE da.date >= '${periodStart.toISOString().split('T')[0]}' 
+              AND da.date <= '${periodEnd.toISOString().split('T')[0]}'
+              AND da.problems_completed > 0
+              ${scopeConditions}
+            GROUP BY da.student_id
+          )
+          SELECT 
+            ROW_NUMBER() OVER (ORDER BY cs.current_streak DESC) as rank,
+            s.id as student_id,
+            cs.current_streak as score,
+            sp.name as student_name,
+            sp.grade,
+            sp.avatar_url
+          FROM current_streaks cs
+          JOIN students s ON s.id = cs.student_id
+          JOIN student_profiles sp ON sp.student_id = s.id
+          WHERE cs.current_streak >= 3
+          ORDER BY cs.current_streak DESC
+        `);
+
+      case 'badge_count':
+        return await this.sql.unsafe(`
+          WITH badge_stats AS (
+            SELECT 
+              sb.student_id,
+              COUNT(CASE WHEN sb.is_earned THEN 1 END) as badges_earned,
+              SUM(CASE WHEN sb.is_earned AND bd.tier = 'gold' THEN 3
+                       WHEN sb.is_earned AND bd.tier = 'silver' THEN 2  
+                       WHEN sb.is_earned AND bd.tier = 'bronze' THEN 1
+                       ELSE 0 END) as badge_score
+            FROM student_badges sb
+            JOIN badge_definitions bd ON bd.id = sb.badge_id
+            JOIN students s ON s.id = sb.student_id
+            ${scopeJoins}
+            WHERE sb.earned_at >= '${periodStart.toISOString()}' 
+              AND sb.earned_at <= '${periodEnd.toISOString()}'
+              ${scopeConditions}
+            GROUP BY sb.student_id
+          )
+          SELECT 
+            ROW_NUMBER() OVER (ORDER BY bs.badge_score DESC, bs.badges_earned DESC) as rank,
+            s.id as student_id,
+            bs.badge_score as score,
+            sp.name as student_name,
+            sp.grade,
+            sp.avatar_url,
+            bs.badges_earned as metadata
+          FROM badge_stats bs
+          JOIN students s ON s.id = bs.student_id
+          JOIN student_profiles sp ON sp.student_id = s.id
+          WHERE bs.badges_earned > 0
+          ORDER BY bs.badge_score DESC, bs.badges_earned DESC
+        `);
+
+      default:
+        return [];
+    }
+  }
+
+  // Get comprehensive leaderboard data with pagination and filtering
   async getLeaderboard(params: {
-    type: string;
-    scope: string;
+    type: 'weekly_xp' | 'monthly_accuracy' | 'challenge_completion' | 'streak_leaders' | 'badge_count';
+    scope: 'class' | 'grade' | 'school';
     classId?: number;
     schoolId?: number;
     gradeLevel?: string;
     limit: number;
+    offset?: number;
+    leaderboardId?: number;
   }) {
-    // For now, return weekly XP leaderboard - can be expanded
-    if (params.type === 'weekly_xp' && params.scope === 'class' && params.classId) {
-      return await this.sql`
+    // If specific leaderboard ID provided, get from leaderboard_entries
+    if (params.leaderboardId) {
+      const entries = await this.sql`
         SELECT 
-          sx.student_id,
-          sx.weekly_xp as score,
+          le.rank,
+          le.student_id,
+          le.score,
+          le.previous_rank,
+          le.trend_direction,
+          le.metadata,
           sp.name as student_name,
-          sp.grade
-        FROM student_xp sx
-        JOIN students s ON s.id = sx.student_id
+          sp.grade,
+          sp.avatar_url,
+          l.type,
+          l.scope,
+          l.period_start,
+          l.period_end
+        FROM leaderboard_entries le
+        JOIN leaderboards l ON l.id = le.leaderboard_id
+        JOIN students s ON s.id = le.student_id
         JOIN student_profiles sp ON sp.student_id = s.id
-        JOIN class_enrollments ce ON ce.student_id = s.id
-        WHERE ce.class_id = ${params.classId} AND ce.is_active = true
-        ORDER BY sx.weekly_xp DESC
-        LIMIT ${params.limit}
+        WHERE le.leaderboard_id = ${params.leaderboardId}
+        ORDER BY le.rank
+        LIMIT ${params.limit} OFFSET ${params.offset || 0}
+      `;
+      return entries;
+    }
+
+    // Get current/active leaderboard for the type and scope
+    const currentLeaderboard = await this.sql`
+      SELECT * FROM leaderboards 
+      WHERE type = ${params.type} 
+        AND scope = ${params.scope}
+        AND (
+          (${params.classId}::integer IS NULL OR class_id = ${params.classId}) AND
+          (${params.schoolId}::integer IS NULL OR school_id = ${params.schoolId}) AND
+          (${params.gradeLevel}::text IS NULL OR grade_level = ${params.gradeLevel})
+        )
+        AND is_current = true
+        AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (currentLeaderboard.length === 0) {
+      // No current leaderboard exists, return empty
+      return [];
+    }
+
+    // Get entries for this leaderboard
+    return await this.getLeaderboard({
+      ...params,
+      leaderboardId: currentLeaderboard[0].id
+    });
+  }
+
+  // ================================================================================
+  // AUTOMATED LEADERBOARD MANAGEMENT - Create, Update, Archive
+  // ================================================================================
+
+  // Create a new leaderboard for a given period and scope
+  async createLeaderboard(params: {
+    type: 'weekly_xp' | 'monthly_accuracy' | 'challenge_completion' | 'streak_leaders' | 'badge_count';
+    scope: 'class' | 'grade' | 'school';
+    classId?: number;
+    schoolId?: number;
+    gradeLevel?: string;
+    periodType: 'weekly' | 'monthly';
+    periodStart: Date;
+    periodEnd: Date;
+  }): Promise<number> {
+    const { type, scope, classId, schoolId, gradeLevel, periodType, periodStart, periodEnd } = params;
+
+    // First, mark any existing current leaderboards as non-current
+    await this.sql`
+      UPDATE leaderboards 
+      SET is_current = false, updated_at = CURRENT_TIMESTAMP
+      WHERE type = ${type} 
+        AND scope = ${scope}
+        AND (${classId || null}::integer IS NULL OR class_id = ${classId || null})
+        AND (${schoolId || null}::integer IS NULL OR school_id = ${schoolId || null})
+        AND (${gradeLevel || null}::text IS NULL OR grade_level = ${gradeLevel || null})
+        AND is_current = true
+    `;
+
+    // Create new leaderboard
+    const [leaderboard] = await this.sql`
+      INSERT INTO leaderboards (
+        type, scope, class_id, school_id, grade_level,
+        period_type, period_start, period_end, is_active, is_current
+      ) VALUES (
+        ${type}, ${scope}, ${classId || null}, ${schoolId || null}, ${gradeLevel || null},
+        ${periodType}, ${periodStart.toISOString()}, ${periodEnd.toISOString()}, true, true
+      ) RETURNING id
+    `;
+
+    console.log(`Created new ${type} leaderboard (${scope}) for period ${periodStart.toISOString()} - ${periodEnd.toISOString()}`);
+    return leaderboard.id;
+  }
+
+  // Update leaderboard entries with current rankings and trend analysis
+  async updateLeaderboardEntries(leaderboardId: number): Promise<void> {
+    // Get leaderboard details
+    const [leaderboard] = await this.sql`
+      SELECT * FROM leaderboards WHERE id = ${leaderboardId}
+    `;
+
+    if (!leaderboard) {
+      throw new Error(`Leaderboard ${leaderboardId} not found`);
+    }
+
+    // Calculate current rankings
+    const currentRankings = await this.calculateLeaderboardRankings({
+      type: leaderboard.type as any,
+      scope: leaderboard.scope as any,
+      classId: leaderboard.class_id,
+      schoolId: leaderboard.school_id,
+      gradeLevel: leaderboard.grade_level,
+      periodStart: new Date(leaderboard.period_start),
+      periodEnd: new Date(leaderboard.period_end)
+    });
+
+    // Get previous leaderboard for trend analysis
+    const [previousLeaderboard] = await this.sql`
+      SELECT id FROM leaderboards 
+      WHERE type = ${leaderboard.type}
+        AND scope = ${leaderboard.scope}
+        AND (${leaderboard.class_id}::integer IS NULL OR class_id = ${leaderboard.class_id})
+        AND (${leaderboard.school_id}::integer IS NULL OR school_id = ${leaderboard.school_id})
+        AND (${leaderboard.grade_level}::text IS NULL OR grade_level = ${leaderboard.grade_level})
+        AND id != ${leaderboardId}
+        AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    let previousRankings = [];
+    if (previousLeaderboard) {
+      previousRankings = await this.sql`
+        SELECT student_id, rank FROM leaderboard_entries 
+        WHERE leaderboard_id = ${previousLeaderboard.id}
       `;
     }
+
+    // Create lookup map for previous ranks
+    const previousRanksMap = new Map();
+    previousRankings.forEach((entry: any) => {
+      previousRanksMap.set(entry.student_id, entry.rank);
+    });
+
+    // Clear existing entries and insert new ones
+    await this.sql`DELETE FROM leaderboard_entries WHERE leaderboard_id = ${leaderboardId}`;
+
+    // Insert new entries with trend analysis
+    for (const ranking of currentRankings) {
+      const previousRank = previousRanksMap.get(ranking.student_id);
+      let trendDirection = 'new';
+
+      if (previousRank) {
+        if (ranking.rank < previousRank) {
+          trendDirection = 'up';
+        } else if (ranking.rank > previousRank) {
+          trendDirection = 'down';
+        } else {
+          trendDirection = 'same';
+        }
+      }
+
+      await this.sql`
+        INSERT INTO leaderboard_entries (
+          leaderboard_id, student_id, rank, score, previous_rank, trend_direction, metadata
+        ) VALUES (
+          ${leaderboardId}, ${ranking.student_id}, ${ranking.rank}, ${ranking.score},
+          ${previousRank || null}, ${trendDirection}, ${JSON.stringify(ranking.metadata || {})}
+        )
+      `;
+    }
+
+    console.log(`Updated ${currentRankings.length} entries for leaderboard ${leaderboardId}`);
+  }
+
+  // Archive old leaderboards (mark as inactive but keep data)
+  async archiveOldLeaderboards(cutoffDate: Date): Promise<void> {
+    const result = await this.sql`
+      UPDATE leaderboards 
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
+      WHERE period_end < ${cutoffDate.toISOString()} AND is_active = true
+    `;
+
+    console.log(`Archived ${result.count} old leaderboards before ${cutoffDate.toISOString()}`);
+  }
+
+  // Get leaderboard history for a specific student
+  async getStudentLeaderboardPositions(studentId: number, limit: number = 10) {
+    return await this.sql`
+      SELECT 
+        le.rank,
+        le.score,
+        le.previous_rank,
+        le.trend_direction,
+        l.type,
+        l.scope,
+        l.period_start,
+        l.period_end,
+        l.class_id,
+        l.school_id,
+        l.grade_level
+      FROM leaderboard_entries le
+      JOIN leaderboards l ON l.id = le.leaderboard_id
+      WHERE le.student_id = ${studentId}
+        AND l.is_active = true
+      ORDER BY l.period_end DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  // Get specific leaderboard by ID
+  async getLeaderboardById(leaderboardId: number) {
+    const results = await this.sql`
+      SELECT 
+        l.id,
+        l.type,
+        l.scope,
+        l.class_id,
+        l.school_id,
+        l.grade_level,
+        l.period_start,
+        l.period_end,
+        l.is_current,
+        l.is_active,
+        l.created_at,
+        COUNT(le.id) as entries_count
+      FROM leaderboards l
+      LEFT JOIN leaderboard_entries le ON le.leaderboard_id = l.id
+      WHERE l.id = ${leaderboardId}
+      GROUP BY l.id, l.type, l.scope, l.class_id, l.school_id, l.grade_level, 
+               l.period_start, l.period_end, l.is_current, l.is_active, l.created_at
+      LIMIT 1
+    `;
     
-    return []; // Return empty for unsupported leaderboard types for now
+    return results.length > 0 ? results[0] : null;
+  }
+
+  // Get leaderboard history for analysis
+  async getLeaderboardHistory(params: {
+    type?: string;
+    scope?: string;
+    classId?: number;
+    schoolId?: number;
+    gradeLevel?: string;
+    limit?: number;
+  }) {
+    const conditions = [];
+    const values = [];
+
+    if (params.type) {
+      conditions.push(`l.type = $${values.length + 1}`);
+      values.push(params.type);
+    }
+    if (params.scope) {
+      conditions.push(`l.scope = $${values.length + 1}`);
+      values.push(params.scope);
+    }
+    if (params.classId) {
+      conditions.push(`l.class_id = $${values.length + 1}`);
+      values.push(params.classId);
+    }
+    if (params.schoolId) {
+      conditions.push(`l.school_id = $${values.length + 1}`);
+      values.push(params.schoolId);
+    }
+    if (params.gradeLevel) {
+      conditions.push(`l.grade_level = $${values.length + 1}`);
+      values.push(params.gradeLevel);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limitClause = params.limit ? `LIMIT ${params.limit}` : '';
+
+    return await this.sql.unsafe(`
+      SELECT 
+        l.id,
+        l.type,
+        l.scope,
+        l.class_id,
+        l.school_id,
+        l.grade_level,
+        l.period_start,
+        l.period_end,
+        l.is_current,
+        l.is_active,
+        COUNT(le.id) as entries_count
+      FROM leaderboards l
+      LEFT JOIN leaderboard_entries le ON le.leaderboard_id = l.id
+      ${whereClause}
+      GROUP BY l.id, l.type, l.scope, l.class_id, l.school_id, l.grade_level, 
+               l.period_start, l.period_end, l.is_current, l.is_active
+      ORDER BY l.period_end DESC
+      ${limitClause}
+    `, values);
+  }
+
+  // ================================================================================
+  // WEEKLY LEADERBOARD RESET AUTOMATION - Complete system reset and regeneration
+  // ================================================================================
+
+  // Comprehensive weekly leaderboard reset and regeneration
+  async resetWeeklyLeaderboards(): Promise<void> {
+    console.log('🔄 Starting weekly leaderboard reset automation...');
+    
+    try {
+      await this.sql.begin(async (sql) => {
+        // 1. Archive leaderboards older than 60 days
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 60);
+        await this.archiveOldLeaderboards(cutoffDate);
+        
+        // 2. Reset weekly XP for all students (keep for next week's calculation)
+        await this.resetWeeklyXP();
+        
+        // 3. Get current week dates
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // Sunday
+        endOfWeek.setHours(23, 59, 59, 999);
+        
+        // 4. Create new weekly leaderboards for all active classes
+        const activeClasses = await sql`
+          SELECT DISTINCT c.id, c.name, c.school_id, c.grade_level 
+          FROM classes c
+          JOIN class_enrollments ce ON ce.class_id = c.id
+          WHERE c.is_active = true AND ce.is_active = true
+        `;
+        
+        console.log(`Creating weekly leaderboards for ${activeClasses.length} active classes...`);
+        
+        for (const classInfo of activeClasses) {
+          // Create weekly XP leaderboard for each class
+          const leaderboardId = await this.createLeaderboard({
+            type: 'weekly_xp',
+            scope: 'class',
+            classId: classInfo.id,
+            schoolId: classInfo.school_id, // FIX: Pass required school_id
+            gradeLevel: classInfo.grade_level, // FIX: Pass required grade_level
+            periodType: 'weekly',
+            periodStart: startOfWeek,
+            periodEnd: endOfWeek
+          });
+          
+          // Update the leaderboard with initial entries (will be empty since XP was reset)
+          // This creates the structure ready for the week
+          await this.updateLeaderboardEntries(leaderboardId);
+        }
+        
+        // 5. Create school-level weekly XP leaderboards
+        const activeSchools = await sql`
+          SELECT DISTINCT s.id, s.name 
+          FROM schools s
+          JOIN classes c ON c.school_id = s.id
+          JOIN class_enrollments ce ON ce.class_id = c.id
+          WHERE s.is_active = true AND c.is_active = true AND ce.is_active = true
+        `;
+        
+        console.log(`Creating school leaderboards for ${activeSchools.length} schools...`);
+        
+        for (const school of activeSchools) {
+          const leaderboardId = await this.createLeaderboard({
+            type: 'weekly_xp',
+            scope: 'school',
+            schoolId: school.id,
+            periodType: 'weekly',
+            periodStart: startOfWeek,
+            periodEnd: endOfWeek
+          });
+          
+          await this.updateLeaderboardEntries(leaderboardId);
+        }
+        
+        // 6. Create grade-level weekly XP leaderboards
+        const activeGrades = await sql`
+          SELECT DISTINCT sp.grade 
+          FROM student_profiles sp
+          JOIN students s ON s.id = sp.student_id
+          JOIN class_enrollments ce ON ce.student_id = s.id
+          WHERE ce.is_active = true AND sp.grade IS NOT NULL
+        `;
+        
+        console.log(`Creating grade leaderboards for ${activeGrades.length} grade levels...`);
+        
+        for (const grade of activeGrades) {
+          const leaderboardId = await this.createLeaderboard({
+            type: 'weekly_xp',
+            scope: 'grade',
+            gradeLevel: grade.grade,
+            periodType: 'weekly',
+            periodStart: startOfWeek,
+            periodEnd: endOfWeek
+          });
+          
+          await this.updateLeaderboardEntries(leaderboardId);
+        }
+        
+        console.log('✅ Weekly leaderboard reset completed successfully!');
+      });
+      
+    } catch (error) {
+      console.error('❌ Error during weekly leaderboard reset:', error);
+      throw error;
+    }
+  }
+
+  // Daily leaderboard updates - refresh current week's leaderboards
+  async updateCurrentWeekLeaderboards(): Promise<void> {
+    console.log('📊 Updating current week leaderboards...');
+    
+    try {
+      // Get all current weekly leaderboards
+      const currentLeaderboards = await this.sql`
+        SELECT id FROM leaderboards 
+        WHERE is_current = true 
+          AND is_active = true 
+          AND period_type = 'weekly'
+          AND period_end >= CURRENT_DATE
+      `;
+      
+      console.log(`Updating ${currentLeaderboards.length} current weekly leaderboards...`);
+      
+      // Update each leaderboard with current data
+      for (const leaderboard of currentLeaderboards) {
+        await this.updateLeaderboardEntries(leaderboard.id);
+      }
+      
+      console.log('✅ Current week leaderboards updated successfully!');
+      
+    } catch (error) {
+      console.error('❌ Error updating current week leaderboards:', error);
+      throw error;
+    }
+  }
+
+  // Create monthly leaderboards (accuracy, challenge completion, etc.)
+  async createMonthlyLeaderboards(): Promise<void> {
+    console.log('📅 Creating monthly leaderboards...');
+    
+    try {
+      // Get current month dates
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      // Get all active classes for monthly leaderboards
+      const activeClasses = await this.sql`
+        SELECT DISTINCT c.id, c.name, c.school_id, c.grade_level 
+        FROM classes c
+        JOIN class_enrollments ce ON ce.class_id = c.id
+        WHERE c.is_active = true AND ce.is_active = true
+      `;
+      
+      // Create monthly accuracy leaderboards for each class
+      for (const classInfo of activeClasses) {
+        const monthlyAccuracyId = await this.createLeaderboard({
+          type: 'monthly_accuracy',
+          scope: 'class',
+          classId: classInfo.id,
+          periodType: 'monthly',
+          periodStart: startOfMonth,
+          periodEnd: endOfMonth
+        });
+        
+        await this.updateLeaderboardEntries(monthlyAccuracyId);
+        
+        // Create challenge completion leaderboard
+        const challengeCompletionId = await this.createLeaderboard({
+          type: 'challenge_completion',
+          scope: 'class',
+          classId: classInfo.id,
+          periodType: 'monthly',
+          periodStart: startOfMonth,
+          periodEnd: endOfMonth
+        });
+        
+        await this.updateLeaderboardEntries(challengeCompletionId);
+      }
+      
+      console.log('✅ Monthly leaderboards created successfully!');
+      
+    } catch (error) {
+      console.error('❌ Error creating monthly leaderboards:', error);
+      throw error;
+    }
   }
 
   // Reset weekly XP for all students
@@ -967,6 +1627,7 @@ export class DashboardStorage {
     await this.sql`
       UPDATE student_xp SET weekly_xp = 0, updated_at = CURRENT_TIMESTAMP
     `;
+    console.log('✅ Weekly XP reset for all students');
   }
 
   // Get XP statistics for dashboard
