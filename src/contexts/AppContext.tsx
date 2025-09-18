@@ -159,12 +159,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedSubject(null);
   };
 
+  // Filter children by current user (parent)
+  const userChildren = currentUser 
+    ? childrenList.filter(child => {
+        // Check if child has parentId field and matches current user's email
+        return (child as any).parentId === currentUser.email;
+      })
+    : [];
+
   const getEnrolledChildren = (subject: string): Child[] => {
     const enrolledIds = enrollments
       .filter(e => e.subject === subject)
       .map(e => e.childId);
     
-    return childrenList.filter(child => enrolledIds.includes(child.id));
+    return userChildren.filter(child => enrolledIds.includes(child.id));
   };
 
   const getUnenrolledChildren = (subject: string): Child[] => {
@@ -172,7 +180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .filter(e => e.subject === subject)
       .map(e => e.childId);
     
-    return childrenList.filter(child => !enrolledIds.includes(child.id));
+    return userChildren.filter(child => !enrolledIds.includes(child.id));
   };
 
   const updateProgress = (childId: string, subject: string, topic: string, completed: number, total: number) => {
@@ -196,7 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       currentUser,
-      children: childrenList,
+      children: userChildren, // Only return children for current parent
       currentChild,
       progress,
       enrollments,
