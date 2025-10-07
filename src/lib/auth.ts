@@ -262,11 +262,20 @@ class AuthService {
 
   async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
-      const users = this.getStoredUsers();
+      let users = this.getStoredUsers();
       console.log('Total users in system:', users.length);
       
       // Make email comparison case-insensitive
-      const userWithPassword = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      let userWithPassword = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+      // If user not found and trying to access demo account, recreate demo accounts
+      if (!userWithPassword && email.includes('@demo.com')) {
+        console.log('Demo account not found, recreating demo accounts...');
+        const demoAccounts = this.createDemoAccounts();
+        this.saveUsers(demoAccounts);
+        users = demoAccounts;
+        userWithPassword = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      }
 
       if (!userWithPassword) {
         console.log('No user found with email:', email);
