@@ -306,6 +306,18 @@ class AuthService {
       // Create session
       this.saveSession(user.id);
 
+      // If logging in with demo parent account, ensure demo children data exists
+      if (user.email.includes('@demo.com') && user.role === 'parent') {
+        const childrenData = localStorage.getItem('caribbean_ai_children');
+        if (!childrenData || childrenData === '[]') {
+          console.log('Demo parent login detected, creating demo children data...');
+          localStorage.removeItem('caribbean_ai_children');
+          localStorage.removeItem('caribbean_ai_progress');
+          localStorage.removeItem('caribbean_ai_enrollments');
+          this.createFrontendDemoData();
+        }
+      }
+
       return { user, error: null };
     } catch (error) {
       return { user: null, error: 'An unexpected error occurred during sign in' };
