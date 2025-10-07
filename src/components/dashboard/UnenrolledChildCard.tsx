@@ -6,11 +6,12 @@ import { useAppContext } from '@/contexts/AppContext';
 import { User, Plus } from 'lucide-react';
 
 interface Child {
-  id: string;
+  id: number;
   name: string;
   age: number;
-  grade: string;
-  exam: string;
+  gradeLevel: string;
+  targetExam?: string;
+  subjects: string[];
 }
 
 interface UnenrolledChildCardProps {
@@ -19,10 +20,28 @@ interface UnenrolledChildCardProps {
 }
 
 const UnenrolledChildCard: React.FC<UnenrolledChildCardProps> = ({ child, subject }) => {
-  const { enrollChildInSubject } = useAppContext();
+  const { refreshChildren } = useAppContext();
   
-  const handleAddToSubject = () => {
-    enrollChildInSubject(child.id, subject);
+  const handleAddToSubject = async () => {
+    // Update child to include this subject
+    try {
+      const response = await fetch(`/api/parent/children/${child.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_token')}`
+        },
+        body: JSON.stringify({
+          subjects: [...child.subjects, subject]
+        })
+      });
+      
+      if (response.ok) {
+        await refreshChildren();
+      }
+    } catch (error) {
+      console.error('Error adding subject:', error);
+    }
   };
 
   const getExamBadgeColor = (exam: string) => {
@@ -54,13 +73,15 @@ const UnenrolledChildCard: React.FC<UnenrolledChildCardProps> = ({ child, subjec
             </div>
             <div>
               <CardTitle className="text-lg">{child.name}</CardTitle>
-              <CardDescription>Age {child.age} • {child.grade.replace('-', ' ').toUpperCase()}</CardDescription>
+              <CardDescription>Age {child.age} • {child.gradeLevel.replace('-', ' ').toUpperCase()}</CardDescription>
             </div>
           </div>
         </div>
-        <Badge className={`w-fit ${getExamBadgeColor(child.exam)}`}>
-          {formatExamName(child.exam)}
-        </Badge>
+        {child.targetExam && (
+          <Badge className={`w-fit ${getExamBadgeColor(child.targetExam)}`}>
+            {formatExamName(child.targetExam)}
+          </Badge>
+        )}
       </CardHeader>
       
       <CardContent className="space-y-4">

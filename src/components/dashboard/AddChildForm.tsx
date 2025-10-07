@@ -15,12 +15,12 @@ interface AddChildFormProps {
 
 const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
   const { addChild, selectedSubject } = useAppContext();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
     age: '',
-    grade: '',
-    exam: '',
+    gradeLevel: '',
+    targetExam: '',
     subjects: [selectedSubject || 'math'] // Start with current subject selected
   });
   
@@ -39,17 +39,25 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.name && formData.age && formData.grade && formData.exam && formData.subjects.length > 0) {
-      addChild({
-        name: formData.name,
-        email: formData.email || undefined, // Only include email if provided
-        age: parseInt(formData.age),
-        grade: formData.grade,
-        exam: formData.exam
-      }, formData.subjects); // Pass subjects to addChild
-      onClose();
+    if (formData.name && formData.age && formData.gradeLevel && formData.targetExam && formData.subjects.length > 0) {
+      setIsSubmitting(true);
+      try {
+        await addChild({
+          name: formData.name,
+          age: parseInt(formData.age),
+          gradeLevel: formData.gradeLevel,
+          targetExam: formData.targetExam,
+          subjects: formData.subjects
+        });
+        onClose();
+      } catch (error) {
+        console.error('Error adding child:', error);
+        alert('Failed to add child. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -82,21 +90,6 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
             </div>
             
             <div>
-              <Label htmlFor="childEmail">Child's Email (Optional)</Label>
-              <Input
-                id="childEmail"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="Enter child's email (for older children who can log in themselves)"
-                className="mt-1"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                For older children who can create their own linked account. Leave blank if you'll manage their learning sessions.
-              </p>
-            </div>
-            
-            <div>
               <Label htmlFor="age">Age</Label>
               <Input
                 id="age"
@@ -113,7 +106,7 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
             
             <div>
               <Label htmlFor="grade">Current Grade</Label>
-              <Select onValueChange={(value) => setFormData(prev => ({ ...prev, grade: value }))}>
+              <Select onValueChange={(value) => setFormData(prev => ({ ...prev, gradeLevel: value }))}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select grade level" />
                 </SelectTrigger>
@@ -161,7 +154,7 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
             
             <div>
               <Label htmlFor="exam">Target Exam</Label>
-              <Select onValueChange={(value) => setFormData(prev => ({ ...prev, exam: value }))}>
+              <Select onValueChange={(value) => setFormData(prev => ({ ...prev, targetExam: value }))}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select target exam" />
                 </SelectTrigger>
@@ -226,14 +219,15 @@ const AddChildForm: React.FC<AddChildFormProps> = ({ onClose }) => {
             </div>
             
             <div className="flex gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                disabled={isSubmitting}
               >
-                Add Child
+                {isSubmitting ? 'Adding...' : 'Add Child'}
               </Button>
             </div>
           </form>

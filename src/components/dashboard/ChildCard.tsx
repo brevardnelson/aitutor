@@ -7,25 +7,26 @@ import { useAppContext } from '@/contexts/AppContext';
 import { User, Play, BarChart3 } from 'lucide-react';
 
 interface Child {
-  id: string;
+  id: number;
   name: string;
   age: number;
-  grade: string;
-  exam: string;
+  gradeLevel: string;
+  targetExam?: string;
+  subjects: string[];
 }
 
 interface ChildCardProps {
   child: Child;
   onStartLearning?: () => void;
-  onViewAnalytics?: (childId: string, childName: string) => void;
+  onViewAnalytics?: (childId: number, childName: string) => void;
 }
 
 const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning, onViewAnalytics }) => {
-  const { selectChild, selectedSubject, getSubjectProgress } = useAppContext();
+  const { selectChild, selectedSubject, getChildProgress } = useAppContext();
   
   // Get progress for current subject only
   const currentSubject = selectedSubject || 'math';
-  const childProgress = getSubjectProgress(child.id, currentSubject);
+  const childProgress = getChildProgress(child.id).filter(p => p.subject === currentSubject);
   const avgProgress = childProgress.length > 0 
     ? Math.round(childProgress.reduce((acc, p) => acc + (p.completed / p.total * 100), 0) / childProgress.length)
     : 0;
@@ -70,13 +71,15 @@ const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning, onViewAna
             </div>
             <div>
               <CardTitle className="text-lg">{child.name}</CardTitle>
-              <CardDescription>Age {child.age} • {child.grade.replace('-', ' ').toUpperCase()}</CardDescription>
+              <CardDescription>Age {child.age} • {child.gradeLevel.replace('-', ' ').toUpperCase()}</CardDescription>
             </div>
           </div>
         </div>
-        <Badge className={`w-fit ${getExamBadgeColor(child.exam)}`}>
-          {formatExamName(child.exam)}
-        </Badge>
+        {child.targetExam && (
+          <Badge className={`w-fit ${getExamBadgeColor(child.targetExam)}`}>
+            {formatExamName(child.targetExam)}
+          </Badge>
+        )}
       </CardHeader>
       
       <CardContent className="space-y-4">

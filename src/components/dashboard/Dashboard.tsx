@@ -18,18 +18,18 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
   const { user } = useAuth();
-  const { children, selectedSubject, getEnrolledChildren, getUnenrolledChildren } = useAppContext();
+  const { children, selectedSubject, isLoadingChildren } = useAppContext();
   const [showAddChild, setShowAddChild] = React.useState(false);
   const [showDetailedDashboard, setShowDetailedDashboard] = React.useState(false);
-  const [selectedChildForAnalytics, setSelectedChildForAnalytics] = React.useState<{id: string, name: string} | null>(null);
+  const [selectedChildForAnalytics, setSelectedChildForAnalytics] = React.useState<{id: number, name: string} | null>(null);
   const [activeTab, setActiveTab] = React.useState<'children' | 'gamification'>('children');
   
   // Get subject-specific children
   const currentSubject = selectedSubject || 'math';
-  const enrolledChildren = getEnrolledChildren(currentSubject);
-  const unenrolledChildren = getUnenrolledChildren(currentSubject);
+  const enrolledChildren = children.filter(child => child.subjects?.includes(currentSubject));
+  const unenrolledChildren = children.filter(child => !child.subjects?.includes(currentSubject));
 
-  const handleViewAnalytics = (childId: string, childName: string) => {
+  const handleViewAnalytics = (childId: number, childName: string) => {
     setSelectedChildForAnalytics({ id: childId, name: childName });
     setShowDetailedDashboard(true);
   };
@@ -59,7 +59,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user.full_name}!</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user.fullName}!</h1>
             <p className="text-gray-600 mt-1">Manage your children's learning journey</p>
           </div>
           <div className="flex gap-3">
@@ -264,7 +264,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
                   {children.map(child => (
                     <RedemptionRecommendations
                       key={child.id}
-                      studentId={parseInt(child.id)}
+                      studentId={child.id}
                     />
                   ))}
                 </div>
