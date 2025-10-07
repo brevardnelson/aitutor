@@ -72,6 +72,43 @@ const createSystemAdminSchema = Joi.object({
   fullName: Joi.string().min(2).required(),
 });
 
+// Parent signup schema
+const parentSignUpSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+  fullName: Joi.string().min(2).required(),
+  phone: Joi.string().optional(),
+});
+
+// POST /api/auth/signup - Simple parent self-registration
+router.post('/signup', createAccountRateLimit, async (req: Request, res: Response) => {
+  try {
+    const { error, value } = parentSignUpSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: error.details[0].message 
+      });
+    }
+
+    const { email, password, fullName, phone } = value;
+    const result = await authService.createParentAccount(email, password, fullName, phone);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({
+      success: true,
+      user: result.user,
+      token: result.token,
+    });
+  } catch (error) {
+    console.error('Sign up error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/auth/signin
 router.post('/signin', signinRateLimit, async (req: Request, res: Response) => {
   try {

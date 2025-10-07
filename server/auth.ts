@@ -81,6 +81,62 @@ export class ServerAuthService {
     }
   }
 
+  // Parent self-registration (simplified signup for parents)
+  async createParentAccount(email: string, password: string, fullName: string, phone?: string): Promise<{
+    success: boolean;
+    error?: string;
+    user?: AuthenticatedUser;
+    token?: string;
+  }> {
+    try {
+      // Check if email is already taken
+      const existingUser = await db.select()
+        .from(schema.users)
+        .where(eq(schema.users.email, email.toLowerCase()))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        return { success: false, error: 'Email already in use' };
+      }
+
+      // Create user with parent role
+      const hashedPassword = await this.hashPassword(password);
+      const [user] = await db.insert(schema.users)
+        .values({
+          email: email.toLowerCase(),
+          passwordHash: hashedPassword,
+          fullName,
+          phone,
+          role: 'parent', // Legacy role field
+          isActive: true,
+        })
+        .returning();
+
+      // Create parent role in user_roles table
+      await db.insert(schema.userRoles)
+        .values({
+          userId: user.id,
+          role: 'parent',
+          schoolId: undefined, // Parents don't need school assignment
+          permissions: this.getDefaultPermissions('parent'),
+          isActive: true,
+        });
+
+      // Get full authenticated user and generate token
+      const authenticatedUser = await this.getUserById(user.id);
+      const token = this.generateToken(user);
+
+      return { 
+        success: true, 
+        user: authenticatedUser || undefined,
+        token 
+      };
+    } catch (error) {
+      console.error('Failed to create parent account:', error);
+      return { success: false, error: 'Failed to create account' };
+    }
+  }
+
   // System admin setup (only for initial bootstrap)
   async createSystemAdmin(email: string, password: string, fullName: string): Promise<{
     success: boolean;
