@@ -1,27 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, authService } from '@/lib/auth';
+import { APIUser, apiAuthService } from '@/lib/api-auth';
 
 interface AuthContextType {
-  user: User | null;
+  user: APIUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string, fullName: string, role: any, phone?: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<APIUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     checkAuthState();
     
-    // Listen for storage changes (for cross-tab authentication)
+    // Listen for token changes (for cross-tab authentication)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'caribbeanAI_session') {
+      if (e.key === 'caribbeanAI_token') {
         checkAuthState();
       }
     };
@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const checkAuthState = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await authService.getCurrentUser();
+      const currentUser = await apiAuthService.getCurrentUser();
       setUser(currentUser);
     } catch (error) {
       console.error('Error checking auth state:', error);
@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const result = await authService.signIn(email, password);
+      const result = await apiAuthService.signIn(email, password);
       if (result.error) {
         return { success: false, error: result.error };
       }
@@ -63,11 +63,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     email: string, 
     password: string, 
     fullName: string, 
-    role: any, 
     phone?: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const result = await authService.signUp(email, password, fullName, role, phone);
+      const result = await apiAuthService.signUp(email, password, fullName, phone);
       if (result.error) {
         return { success: false, error: result.error };
       }
@@ -83,7 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signOut = async (): Promise<void> => {
     try {
-      await authService.signOut();
+      await apiAuthService.signOut();
       setUser(null);
     } catch (error) {
       console.error('Error signing out:', error);
