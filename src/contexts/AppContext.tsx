@@ -1,54 +1,28 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import { childrenAPI, Child as APIChild, ProgressData } from '@/lib/api-children';
 
 interface Child {
-  id: string;
+  id: number;
   name: string;
-  email?: string; // Optional email for older children who can create their own accounts
   age: number;
-  grade: string;
-  exam: string;
-}
-
-interface Parent {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-}
-
-interface Progress {
-  childId: string;
-  subject: string;
-  topic: string;
-  completed: number;
-  total: number;
-  lastActivity: Date;
-}
-
-interface SubjectEnrollment {
-  childId: string;
-  subject: string;
-  enrolledAt: Date;
+  gradeLevel: string;
+  targetExam?: string;
+  subjects: string[];
 }
 
 interface AppContextType {
-  currentUser: Parent | null;
   children: Child[];
   currentChild: Child | null;
-  progress: Progress[];
-  enrollments: SubjectEnrollment[];
+  childrenProgress: Map<number, ProgressData[]>;
   selectedSubject: string | null;
-  login: (parent: Parent) => void;
-  logout: () => void;
-  addChild: (child: Omit<Child, 'id'>, subjects?: string[]) => void;
+  isLoadingChildren: boolean;
+  addChild: (child: { name: string; age: number; gradeLevel: string; targetExam?: string; subjects: string[] }) => Promise<void>;
   selectChild: (child: Child) => void;
   setSubject: (subject: string) => void;
   clearSubject: () => void;
-  enrollChildInSubject: (childId: string, subject: string) => void;
-  getEnrolledChildren: (subject: string) => Child[];
-  getUnenrolledChildren: (subject: string) => Child[];
-  updateProgress: (childId: string, subject: string, topic: string, completed: number, total: number) => void;
-  getSubjectProgress: (childId: string, subject: string) => Progress[];
+  refreshChildren: () => Promise<void>;
+  getChildProgress: (childId: number) => ProgressData[];
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -59,97 +33,73 @@ export const useAppContext = () => {
   return context;
 };
 
-// Helper functions for localStorage persistence
-const loadFromStorage = (key: string, defaultValue: any): any => {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
-  } catch (error) {
-    console.error(`Error loading ${key} from localStorage:`, error);
-    return defaultValue;
-  }
-};
-
-const saveToStorage = (key: string, value: any): void => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Error saving ${key} to localStorage:`, error);
-  }
-};
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<Parent | null>(null);
-  const [childrenList, setChildrenList] = useState<Child[]>(() => 
-    loadFromStorage('caribbean_ai_children', [])
-  );
+  const { user, isAuthenticated } = useAuth();
+  const [childrenList, setChildrenList] = useState<Child[]>([]);
   const [currentChild, setCurrentChild] = useState<Child | null>(null);
-  const [progress, setProgress] = useState<Progress[]>(() => 
-    loadFromStorage('caribbean_ai_progress', [])
-  );
-  const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>(() => 
-    loadFromStorage('caribbean_ai_enrollments', [])
-  );
+  const [childrenProgress, setChildrenProgress] = useState<Map<number, ProgressData[]>>(new Map());
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [isLoadingChildren, setIsLoadingChildren] = useState(false);
 
-  // Persist children list to localStorage whenever it changes
+  // Fetch children when user is authenticated
   useEffect(() => {
-    saveToStorage('caribbean_ai_children', childrenList);
-  }, [childrenList]);
+    if (isAuthenticated && user) {
+      refreshChildren();
+    } else {
+      setChildrenList([]);
+      setCurrentChild(null);
+      setChildrenProgress(new Map());
+    }
+  }, [isAuthenticated, user]);
 
-  // Persist enrollments to localStorage whenever they change
-  useEffect(() => {
-    saveToStorage('caribbean_ai_enrollments', enrollments);
-  }, [enrollments]);
-
-  // Persist progress to localStorage whenever it changes
-  useEffect(() => {
-    saveToStorage('caribbean_ai_progress', progress);
-  }, [progress]);
-
-  const login = (parent: Parent) => {
-    setCurrentUser(parent);
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
-    setCurrentChild(null);
-    // Clear persisted current child
-    localStorage.removeItem('caribbean_ai_current_child');
-  };
-
-  const enrollChildInSubject = (childId: string, subject: string) => {
-    setEnrollments(prev => {
-      // Check if already enrolled
-      const existing = prev.find(e => e.childId === childId && e.subject === subject);
-      if (existing) return prev;
-      
-      // Add new enrollment
-      return [...prev, {
-        childId,
-        subject,
-        enrolledAt: new Date()
-      }];
-    });
-  };
-
-  const addChild = (child: Omit<Child, 'id'>, subjects?: string[]) => {
-    const newChild = { ...child, id: Date.now().toString() };
-    setChildrenList(prev => [...prev, newChild]);
+  const refreshChildren = async () => {
+    if (!isAuthenticated) return;
     
-    // Enroll child in specified subjects or current subject as default
-    const subjectsToEnroll = subjects && subjects.length > 0 ? subjects : [selectedSubject || 'math'];
-    subjectsToEnroll.forEach(subject => {
-      enrollChildInSubject(newChild.id, subject);
-    });
+    setIsLoadingChildren(true);
+    try {
+      const fetchedChildren = await childrenAPI.getChildren();
+      setChildrenList(fetchedChildren);
+
+      // Fetch progress for each child
+      const progressMap = new Map<number, ProgressData[]>();
+      await Promise.all(
+        fetchedChildren.map(async (child) => {
+          try {
+            const progress = await childrenAPI.getChildProgress(child.id);
+            progressMap.set(child.id, progress);
+          } catch (error) {
+            console.error(`Error fetching progress for child ${child.id}:`, error);
+            progressMap.set(child.id, []);
+          }
+        })
+      );
+      setChildrenProgress(progressMap);
+    } catch (error) {
+      console.error('Error fetching children:', error);
+    } finally {
+      setIsLoadingChildren(false);
+    }
+  };
+
+  const addChild = async (childData: {
+    name: string;
+    age: number;
+    gradeLevel: string;
+    targetExam?: string;
+    subjects: string[];
+  }) => {
+    try {
+      await childrenAPI.createChild(childData);
+      await refreshChildren();
+    } catch (error) {
+      console.error('Error adding child:', error);
+      throw error;
+    }
   };
 
   const selectChild = (child: Child) => {
     setCurrentChild(child);
-    // Persist current child for learning tracker access
-    saveToStorage('caribbean_ai_current_child', child);
   };
-
 
   const setSubject = (subject: string) => {
     setSelectedSubject(subject);
@@ -159,67 +109,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedSubject(null);
   };
 
-  // Filter children by current user (parent)
-  const userChildren = currentUser 
-    ? childrenList.filter(child => {
-        // Check if child has parentId field and matches current user's email
-        return (child as any).parentId === currentUser.email;
-      })
-    : [];
-
-  const getEnrolledChildren = (subject: string): Child[] => {
-    const enrolledIds = enrollments
-      .filter(e => e.subject === subject)
-      .map(e => e.childId);
-    
-    return userChildren.filter(child => enrolledIds.includes(child.id));
-  };
-
-  const getUnenrolledChildren = (subject: string): Child[] => {
-    const enrolledIds = enrollments
-      .filter(e => e.subject === subject)
-      .map(e => e.childId);
-    
-    return userChildren.filter(child => !enrolledIds.includes(child.id));
-  };
-
-  const updateProgress = (childId: string, subject: string, topic: string, completed: number, total: number) => {
-    setProgress(prev => {
-      const existing = prev.find(p => p.childId === childId && p.subject === subject && p.topic === topic);
-      if (existing) {
-        return prev.map(p => 
-          p.childId === childId && p.subject === subject && p.topic === topic 
-            ? { ...p, completed, total, lastActivity: new Date() }
-            : p
-        );
-      }
-      return [...prev, { childId, subject, topic, completed, total, lastActivity: new Date() }];
-    });
-  };
-
-  const getSubjectProgress = (childId: string, subject: string): Progress[] => {
-    return progress.filter(p => p.childId === childId && p.subject === subject);
+  const getChildProgress = (childId: number): ProgressData[] => {
+    return childrenProgress.get(childId) || [];
   };
 
   return (
     <AppContext.Provider value={{
-      currentUser,
-      children: userChildren, // Only return children for current parent
+      children: childrenList,
       currentChild,
-      progress,
-      enrollments,
+      childrenProgress,
       selectedSubject,
-      login,
-      logout,
+      isLoadingChildren,
       addChild,
       selectChild,
       setSubject,
       clearSubject,
-      enrollChildInSubject,
-      getEnrolledChildren,
-      getUnenrolledChildren,
-      updateProgress,
-      getSubjectProgress
+      refreshChildren,
+      getChildProgress,
     }}>
       {children}
     </AppContext.Provider>
