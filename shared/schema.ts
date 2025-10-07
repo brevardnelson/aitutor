@@ -100,7 +100,6 @@ export const students = pgTable('students', {
   age: integer('age'),
   gradeLevel: varchar('grade_level'), // Supports both US grades (K, Grade 1-13) and Caribbean levels (Infant 1-2, Standard 1-5, Form 1-6)
   targetExam: varchar('target_exam'), // SEA, CSEC, CAPE, etc.
-  subjects: json('subjects').$type<string[]>(),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
