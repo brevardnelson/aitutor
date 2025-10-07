@@ -95,10 +95,24 @@ export const students = pgTable('students', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id), // For backward compatibility
   parentId: integer('parent_id').references(() => users.id), 
+  name: varchar('name').notNull(),
+  email: varchar('email'), // Optional email for older children
+  age: integer('age'),
   gradeLevel: varchar('grade_level'), // Supports both US grades (K, Grade 1-13) and Caribbean levels (Infant 1-2, Standard 1-5, Form 1-6)
+  targetExam: varchar('target_exam'), // SEA, CSEC, CAPE, etc.
   subjects: json('subjects').$type<string[]>(),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// Simple subject enrollments for parent-managed students
+export const studentSubjectEnrollments = pgTable('student_subject_enrollments', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').references(() => students.id).notNull(),
+  subject: varchar('subject').notNull(),
+  enrolledAt: timestamp('enrolled_at').defaultNow(),
+}, (table) => ({
+  uniqueStudentSubject: unique().on(table.studentId, table.subject),
+}));
 
 // Use existing progress table structure and extend it
 export const progress = pgTable('progress', {
