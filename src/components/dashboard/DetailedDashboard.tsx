@@ -34,7 +34,7 @@ import PerformanceChart from './charts/PerformanceChart';
 import EngagementHeatmap from './charts/EngagementHeatmap';
 
 interface DetailedDashboardProps {
-  childId: string;
+  childId: number;
   childName: string;
   subject: string;
   onBack: () => void;

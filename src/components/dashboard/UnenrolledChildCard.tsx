@@ -21,26 +21,22 @@ interface UnenrolledChildCardProps {
 
 const UnenrolledChildCard: React.FC<UnenrolledChildCardProps> = ({ child, subject }) => {
   const { refreshChildren } = useAppContext();
+  const [isLoading, setIsLoading] = React.useState(false);
   
   const handleAddToSubject = async () => {
-    // Update child to include this subject
+    setIsLoading(true);
     try {
-      const response = await fetch(`/api/parent/children/${child.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_token')}`
-        },
-        body: JSON.stringify({
-          subjects: [...child.subjects, subject]
-        })
+      // Import the API client
+      const { childrenAPI } = await import('@/lib/api-children');
+      await childrenAPI.updateChild(child.id, {
+        subjects: [...child.subjects, subject]
       });
-      
-      if (response.ok) {
-        await refreshChildren();
-      }
+      await refreshChildren();
     } catch (error) {
       console.error('Error adding subject:', error);
+      alert('Failed to add subject. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -98,9 +94,10 @@ const UnenrolledChildCard: React.FC<UnenrolledChildCardProps> = ({ child, subjec
           <Button 
             onClick={handleAddToSubject}
             className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 flex items-center gap-2"
+            disabled={isLoading}
           >
             <Plus className="h-4 w-4" />
-            Add to {formatSubjectName(subject)}
+            {isLoading ? 'Adding...' : `Add to ${formatSubjectName(subject)}`}
           </Button>
         </div>
       </CardContent>
