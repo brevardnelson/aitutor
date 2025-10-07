@@ -1,8 +1,21 @@
-# Interactive Math AI Tutor
+# Caribbean AI Tutor Platform
 
 ## Overview
 
-This is a web-based AI platform designed to guide students through math problems for high school exam preparation using a Socratic teaching method. The application provides interactive tutoring sessions with step-by-step guidance, practice tests, and progress tracking for students preparing for various high school entrance exams.
+A comprehensive web-based AI tutoring platform supporting both US (K-13) and Caribbean (Infant 1-2, Standard 1-5, Form 1-6) grade systems. The application features multi-institutional hierarchy, parent engagement systems with email notifications, achievement badges, intelligent reward recommendations, and fully integrated parent dashboards alongside student gamification infrastructure.
+
+## Recent Updates (October 2025)
+
+### PostgreSQL Migration Complete ✅
+- Migrated all data storage from localStorage to PostgreSQL database
+- Implemented JWT token-based authentication with secure cookie storage
+- Created comprehensive API client services for children and authentication
+- Updated all components to use async database operations
+- Fixed authentication: Added user_roles table entries for all demo accounts
+
+### Demo Accounts
+- **Parents**: parent.johnson@demo.com, parent.williams@demo.com, parent.garcia@demo.com (password: demo123)
+- Each parent has 2 children with real progress data in database
 
 ## User Preferences
 
