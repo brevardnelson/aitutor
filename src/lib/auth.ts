@@ -275,6 +275,13 @@ class AuthService {
         this.saveUsers(demoAccounts);
         users = demoAccounts;
         userWithPassword = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        
+        // Force recreation of demo children data
+        console.log('Creating demo children and progress data...');
+        localStorage.removeItem('caribbean_ai_children');
+        localStorage.removeItem('caribbean_ai_progress');
+        localStorage.removeItem('caribbean_ai_enrollments');
+        this.createFrontendDemoData();
       }
 
       if (!userWithPassword) {
