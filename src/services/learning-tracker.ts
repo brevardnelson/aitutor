@@ -33,6 +33,7 @@ export class LearningTracker {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(data),
       });
 
@@ -75,6 +76,7 @@ export class LearningTracker {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           duration,
           ...sessionMetrics,
@@ -107,6 +109,7 @@ export class LearningTracker {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ reason }),
       });
 
@@ -142,6 +145,7 @@ export class LearningTracker {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           studentId,
           subject,
