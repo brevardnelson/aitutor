@@ -13,6 +13,12 @@ A comprehensive web-based AI tutoring platform supporting both US (K-13) and Car
 - Updated all components to use async database operations
 - Fixed authentication: Added user_roles table entries for all demo accounts
 
+### Guided Practice Fixes (October 10, 2025) ✅
+- Fixed question not displaying on first load in guided practice
+- Updated GuidedTutor to use AppContext for currentChild instead of localStorage
+- Improved error logging in learning tracker for better debugging
+- Field name migration: grade→gradeLevel, exam→targetExam across TutorInterface
+
 ### Demo Accounts
 - **Parents**: parent.johnson@demo.com, parent.williams@demo.com, parent.garcia@demo.com (password: demo123)
 - Each parent has 2 children with real progress data in database
