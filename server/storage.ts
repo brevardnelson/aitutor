@@ -2524,6 +2524,55 @@ export class DashboardStorage {
     }); // Close the transaction block properly
   }
 
+  // Get curriculum documents for a specific grade level, subject, and optional topic
+  async getCurriculumDocuments(gradeLevel: string, subject: string, topic?: string) {
+    try {
+      let query = db
+        .select({
+          id: schema.curriculumDocuments.id,
+          title: schema.curriculumDocuments.title,
+          description: schema.curriculumDocuments.description,
+          gradeLevel: schema.curriculumDocuments.gradeLevel,
+          subject: schema.curriculumDocuments.subject,
+          topic: schema.curriculumDocuments.topic,
+          extractedText: schema.curriculumDocuments.extractedText,
+          aiSummary: schema.curriculumDocuments.aiSummary,
+          keyWords: schema.curriculumDocuments.keyWords,
+          difficulty: schema.curriculumDocuments.difficulty,
+          contentType: schema.curriculumDocuments.contentType,
+        })
+        .from(schema.curriculumDocuments)
+        .where(
+          and(
+            eq(schema.curriculumDocuments.gradeLevel, gradeLevel),
+            eq(schema.curriculumDocuments.subject, subject),
+            eq(schema.curriculumDocuments.isProcessed, true), // Only return processed documents
+            eq(schema.curriculumDocuments.isActive, true) // Only return active documents
+          )
+        );
+
+      // If topic is specified, add it to the filter
+      if (topic) {
+        query = query.where(
+          and(
+            eq(schema.curriculumDocuments.gradeLevel, gradeLevel),
+            eq(schema.curriculumDocuments.subject, subject),
+            eq(schema.curriculumDocuments.topic, topic),
+            eq(schema.curriculumDocuments.isProcessed, true),
+            eq(schema.curriculumDocuments.isActive, true)
+          )
+        );
+      }
+
+      const documents = await query.limit(10); // Limit to 10 most relevant documents
+      
+      return documents;
+    } catch (error) {
+      console.error('Error fetching curriculum documents:', error);
+      return [];
+    }
+  }
+
   // Close database connection
   async close() {
     await this.sql.end();

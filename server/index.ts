@@ -238,6 +238,35 @@ app.post('/api/sessions/:sessionId/abandon',
     }
   });
 
+// Curriculum API - fetch curriculum documents for a specific grade level, subject, and topic
+app.get('/api/curriculum/:gradeLevel/:subject', 
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { gradeLevel, subject } = req.params;
+      const { topic } = req.query;
+      
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      // Fetch curriculum documents from database
+      const documents = await storage.getCurriculumDocuments(
+        gradeLevel,
+        subject,
+        topic as string | undefined
+      );
+      
+      res.json({ documents });
+    } catch (error) {
+      console.error('Curriculum fetch error:', error);
+      res.status(500).json({ 
+        error: 'Failed to fetch curriculum documents',
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      });
+    }
+  });
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });

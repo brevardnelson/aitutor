@@ -20,6 +20,9 @@ export interface TutoringRequest {
   userMessage: string;
   context?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  gradeLevel?: string; // e.g., 'standard-5', 'form-3', 'grade-7'
+  targetExam?: string; // e.g., 'common-entrance', 'sea', 'csec'
+  curriculumContext?: string; // Extracted curriculum content for this grade/topic
 }
 
 // Subject-specific model routing configuration
@@ -143,7 +146,7 @@ export class MultiModalAIService {
    * Call Anthropic Claude models
    */
   private async callAnthropic(request: TutoringRequest, model: string): Promise<AIResponse> {
-    const systemPrompt = this.getSystemPrompt(request.subject, request.difficulty);
+    const systemPrompt = this.getSystemPrompt(request.subject, request.difficulty, request.gradeLevel, request.targetExam);
     const userPrompt = this.buildUserPrompt(request);
 
     const response = await this.anthropic.messages.create({
@@ -167,7 +170,7 @@ export class MultiModalAIService {
    * Call OpenAI GPT models
    */
   private async callOpenAI(request: TutoringRequest, model: string): Promise<AIResponse> {
-    const systemPrompt = this.getSystemPrompt(request.subject, request.difficulty);
+    const systemPrompt = this.getSystemPrompt(request.subject, request.difficulty, request.gradeLevel, request.targetExam);
     const userPrompt = this.buildUserPrompt(request);
 
     const response = await this.openai.chat.completions.create({
@@ -189,9 +192,17 @@ export class MultiModalAIService {
   /**
    * Generate subject-specific system prompts optimized for Caribbean education
    */
-  private getSystemPrompt(subject: Subject, difficulty: string = 'intermediate'): string {
+  private getSystemPrompt(subject: Subject, difficulty: string = 'intermediate', gradeLevel?: string, targetExam?: string): string {
+    const gradeLevelInfo = gradeLevel ? `\nStudent Grade Level: ${gradeLevel.replace('-', ' ').toUpperCase()}` : '';
+    const examInfo = targetExam ? `\nTarget Exam: ${targetExam.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}` : '';
+    
     const basePrompt = `You are an expert Caribbean AI tutor specializing in ${subject.replace('-', ' ')}. 
-Your teaching approach should be culturally relevant to Caribbean students and aligned with regional exam standards (Common Entrance, SEA, CXC).
+Your teaching approach should be culturally relevant to Caribbean students and aligned with regional exam standards (Common Entrance, SEA, CXC).${gradeLevelInfo}${examInfo}
+
+CRITICAL: Create questions and content that are AGE-APPROPRIATE and GRADE-APPROPRIATE for this specific level.
+- For primary school students (Infant 1-2, Standard 1-5): Use simple language, basic concepts, concrete examples
+- For secondary school students (Form 1-6): Use more advanced vocabulary, abstract thinking, complex problem-solving
+- Ensure difficulty matches the student's current grade level and preparation needs for their target exam
 
 Use the Socratic method to guide students through problems step-by-step rather than giving direct answers.
 Incorporate Caribbean contexts, examples, and cultural references when appropriate.
@@ -238,12 +249,25 @@ Adapt your language and complexity to ${difficulty} level.`;
   private buildUserPrompt(request: TutoringRequest): string {
     let prompt = `Topic: ${request.topic}\n\n`;
     
-    if (request.context) {
-      prompt += `Context: ${request.context}\n\n`;
+    if (request.gradeLevel) {
+      prompt += `Student Grade Level: ${request.gradeLevel.replace('-', ' ').toUpperCase()}\n`;
     }
     
-    prompt += `Student Question/Request: ${request.userMessage}\n\n`;
-    prompt += `Please provide a helpful, educational response that guides the student toward understanding rather than simply giving the answer.`;
+    if (request.targetExam) {
+      prompt += `Target Exam: ${request.targetExam.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}\n`;
+    }
+    
+    if (request.curriculumContext) {
+      prompt += `\nRelevant Curriculum Content:\n${request.curriculumContext}\n`;
+      prompt += `\nIMPORTANT: Base your questions and guidance on the curriculum content above. Ensure all content aligns with what this grade level should be learning.\n`;
+    }
+    
+    if (request.context) {
+      prompt += `\nAdditional Context: ${request.context}\n`;
+    }
+    
+    prompt += `\nStudent Question/Request: ${request.userMessage}\n\n`;
+    prompt += `Please provide a helpful, educational response that guides the student toward understanding rather than simply giving the answer. Ensure all content is appropriate for the student's grade level and references the curriculum when applicable.`;
     
     return prompt;
   }

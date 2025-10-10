@@ -62,14 +62,49 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   // Get model info for this subject
   const modelInfo = aiService.getModelInfo(subject);
 
-  // Generate AI response using the multi-modal service
+  // Fetch curriculum context for this student's grade level and topic
+  const [curriculumContext, setCurriculumContext] = React.useState<string>('');
+
+  React.useEffect(() => {
+    const fetchCurriculum = async () => {
+      if (!currentChild || !topic) return;
+      
+      try {
+        const response = await fetch(
+          `/api/curriculum/${currentChild.gradeLevel}/${subject}?topic=${encodeURIComponent(topic)}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.documents && data.documents.length > 0) {
+            // Combine curriculum summaries into context
+            const context = data.documents
+              .map((doc: any) => {
+                return `${doc.title}: ${doc.aiSummary || doc.extractedText?.substring(0, 500) || doc.description}`;
+              })
+              .join('\n\n');
+            setCurriculumContext(context);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch curriculum:', error);
+      }
+    };
+    
+    fetchCurriculum();
+  }, [currentChild, subject, topic]);
+
+  // Generate AI response using the multi-modal service with grade-level context
   const generateAIResponse = async (userMessage: string, context?: string) => {
     const request: TutoringRequest = {
       subject,
       topic,
       userMessage,
       context,
-      difficulty: 'intermediate'
+      difficulty: 'intermediate',
+      gradeLevel: currentChild?.gradeLevel,
+      targetExam: currentChild?.targetExam,
+      curriculumContext: curriculumContext || undefined
     };
     
     return await aiService.generateTutoringResponse(request);

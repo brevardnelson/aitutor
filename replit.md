@@ -19,6 +19,16 @@ A comprehensive web-based AI tutoring platform supporting both US (K-13) and Car
 - Improved error logging in learning tracker for better debugging
 - Field name migration: grade→gradeLevel, exam→targetExam across TutorInterface
 
+### Age-Appropriate AI Question Generation (October 10, 2025) ✅
+- Enhanced AI service to accept grade level, target exam, and curriculum context
+- Created API endpoint to fetch curriculum documents by grade level, subject, and topic
+- Updated GuidedTutor to fetch relevant curriculum and pass student context to AI
+- AI now generates age and grade-appropriate questions based on:
+  - Student's current grade level (e.g., Standard 5 vs Form 3)
+  - Target exam preparation (Common Entrance, SEA, CSEC)
+  - Uploaded curriculum content for that specific level
+- System prompts emphasize appropriate difficulty and vocabulary for each grade level
+
 ### Demo Accounts
 - **Parents**: parent.johnson@demo.com, parent.williams@demo.com, parent.garcia@demo.com (password: demo123)
 - Each parent has 2 children with real progress data in database
