@@ -163,20 +163,20 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
-              onClick={() => setView('dashboard')}
+              onClick={() => setViewMode('topics')}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
+              Back to Topics
             </Button>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
                 {currentChild.name}'s Learning Session
               </h1>
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant="secondary">{currentChild.grade.replace('-', ' ').toUpperCase()}</Badge>
+                <Badge variant="secondary">{currentChild.gradeLevel.replace('-', ' ').toUpperCase()}</Badge>
                 <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
-                  {currentChild.exam.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                  {currentChild.targetExam.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                 </Badge>
               </div>
             </div>
