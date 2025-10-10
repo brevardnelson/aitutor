@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, Calculator, Globe, TestTube, FileText, Brain, Lock, Cpu, Settings, GraduationCap } from 'lucide-react';
-import { User } from '@/lib/auth';
+import { APIUser } from '@/lib/api-auth';
 import { aiService, type Subject } from '@/lib/ai-service';
 import { useRBAC } from '@/contexts/RBACContext';
 import { RoleGuard } from '@/components/auth/RoleGuard';
@@ -18,12 +18,15 @@ interface SubjectInfo {
 }
 
 interface SubjectSelectorProps {
-  user: User;
+  user: APIUser;
   onSubjectSelect: (subjectId: string) => void;
 }
 
 const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect }) => {
   const { hasRole } = useRBAC();
+  
+  // Get primary role from roles array
+  const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0].role : 'user';
   const subjects: SubjectInfo[] = [
     {
       id: 'math',
@@ -73,8 +76,8 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
   const getModelInfo = (subjectId: Subject) => {
     const modelInfo = aiService.getModelInfo(subjectId);
     return {
-      provider: modelInfo.primaryProvider,
-      model: modelInfo.primaryModel.replace(/^(claude-|gpt-)/, '')
+      provider: modelInfo.primaryProvider || 'AI',
+      model: (modelInfo.primaryModel || 'advanced').replace(/^(claude-|gpt-)/, '')
     };
   };
 
@@ -89,12 +92,12 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
             </div>
           </div>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            Welcome, {user.full_name}!
+            Welcome, {user.fullName}!
           </h1>
           <p className="text-gray-600 text-lg">Choose a subject to begin your learning journey</p>
           <div className="mt-4">
             <Badge variant="outline" className="text-sm">
-              {user.role.charAt(0).toUpperCase() + user.role.slice(1)} Account
+              {primaryRole.charAt(0).toUpperCase() + primaryRole.slice(1)} Account
             </Badge>
           </div>
         </div>
@@ -195,10 +198,10 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
           <Card className="bg-white/60 backdrop-blur-sm">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-blue-600 mb-2">
-                {user.role === 'student' ? 'Your Learning' : 'Progress Tracking'}
+                {primaryRole === 'student' ? 'Your Learning' : 'Progress Tracking'}
               </div>
               <p className="text-sm text-gray-600">
-                {user.role === 'student' 
+                {primaryRole === 'student' 
                   ? 'Personalized curriculum based on your level'
                   : 'Monitor learning progress and achievements'
                 }
@@ -209,10 +212,10 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
           <Card className="bg-white/60 backdrop-blur-sm">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-purple-600 mb-2">
-                {user.role === 'teacher' ? 'Class Insights' : 'AI Tutoring'}
+                {primaryRole === 'teacher' ? 'Class Insights' : 'AI Tutoring'}
               </div>
               <p className="text-sm text-gray-600">
-                {user.role === 'teacher' 
+                {primaryRole === 'teacher' 
                   ? 'Detailed analytics and learning paths for students'
                   : 'Interactive AI-powered learning assistance'
                 }
@@ -223,10 +226,10 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({ user, onSubjectSelect
           <Card className="bg-white/60 backdrop-blur-sm">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-green-600 mb-2">
-                {user.role === 'parent' ? 'Family Hub' : 'Practice Tests'}
+                {primaryRole === 'parent' ? 'Family Hub' : 'Practice Tests'}
               </div>
               <p className="text-sm text-gray-600">
-                {user.role === 'parent' 
+                {primaryRole === 'parent' 
                   ? 'Manage multiple children and track their progress'
                   : 'Comprehensive exam preparation and assessments'
                 }
