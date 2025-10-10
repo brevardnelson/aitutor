@@ -29,6 +29,12 @@ A comprehensive web-based AI tutoring platform supporting both US (K-13) and Car
   - Uploaded curriculum content for that specific level
 - System prompts emphasize appropriate difficulty and vocabulary for each grade level
 
+### Session Tracking Fix (October 10, 2025) ✅
+- Fixed 401 Unauthorized errors in learning session tracking
+- Added `credentials: 'include'` to all fetch requests in learning-tracker.ts
+- Session tracking now properly authenticates using JWT cookies
+- All session APIs (start, end, abandon, problem-attempt) now work correctly
+
 ### Demo Accounts
 - **Parents**: parent.johnson@demo.com, parent.williams@demo.com, parent.garcia@demo.com (password: demo123)
 - Each parent has 2 children with real progress data in database
