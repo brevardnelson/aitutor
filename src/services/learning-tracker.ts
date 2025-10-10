@@ -37,7 +37,10 @@ export class LearningTracker {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to start session: ${response.statusText}`);
+        const errorText = await response.text();
+        const errorMessage = `Failed to start session: ${response.status} ${response.statusText} - ${errorText}`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -47,7 +50,7 @@ export class LearningTracker {
       console.log(`Started learning session ${this.currentSessionId} for ${data.topic}`);
       return this.currentSessionId;
     } catch (error) {
-      console.error('Error starting learning session:', error);
+      console.error('Error starting learning session:', error instanceof Error ? error.message : String(error), error);
       throw error;
     }
   }

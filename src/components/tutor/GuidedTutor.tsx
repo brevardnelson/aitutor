@@ -8,6 +8,7 @@ import { StepValidator, StepValidationResult } from '@/lib/stepValidator';
 import { guidedTutorContent, TopicKey, getRandomQuestion } from './GuidedTutorContent';
 import { aiService, type Subject, type TutoringRequest } from '@/lib/ai-service';
 import { learningTracker, LearningTracker } from '@/services/learning-tracker';
+import { useAppContext } from '@/contexts/AppContext';
 
 interface Message {
   id: string;
@@ -27,6 +28,8 @@ interface GuidedTutorProps {
 }
 
 const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onComplete, onReset }) => {
+  const { currentChild } = useAppContext();
+  
   const getInitialQuestion = () => {
     if (!topic) return guidedTutorContent['Fractions'].questions[0];
     
@@ -72,35 +75,13 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     return await aiService.generateTutoringResponse(request);
   };
 
-  // Initialize with AI welcome message and start learning session
+  // Start learning session (getNewQuestion will display the first problem)
   React.useEffect(() => {
-    const initializeChat = async () => {
-      try {
-        const welcomeMessage = await generateAIResponse(`Start a new ${subject} tutoring session on the topic: ${topic}. Introduce a problem and ask the student to begin.`);
-        setMessages([{
-          id: '1',
-          type: 'ai',
-          content: welcomeMessage.content,
-          timestamp: new Date(),
-          aiModel: welcomeMessage.model,
-          aiProvider: welcomeMessage.provider
-        }]);
-      } catch (error) {
-        console.error('Error initializing chat:', error);
-        setMessages([{
-          id: '1',
-          type: 'ai',
-          content: `Let's work through this ${topic} problem step by step. I'm here to guide you through it!`,
-          timestamp: new Date()
-        }]);
-      }
-    };
-
     const startSession = async () => {
-      if (topic && !sessionStarted) {
+      if (topic && !sessionStarted && currentChild) {
         try {
           const sessionData = {
-            studentId: LearningTracker.getCurrentStudentId(),
+            studentId: currentChild.id,
             subject: subject,
             topic: topic,
             sessionType: 'practice' as 'practice'
@@ -116,9 +97,8 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       }
     };
     
-    initializeChat();
     startSession();
-  }, [topic, subject, sessionStarted]);
+  }, [topic, subject, sessionStarted, currentChild]);
 
   // Helper function to end session properly with aggregates
   const endSessionWithMetrics = async (reason: string = 'Session completed') => {
@@ -188,10 +168,10 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     // Note: Don't reset aggregate counters - they track session-wide metrics
     
     // Fix #3: Ensure session continuity for new questions
-    if (!learningTracker.isSessionActive()) {
+    if (!learningTracker.isSessionActive() && currentChild) {
       try {
         const sessionData = {
-          studentId: LearningTracker.getCurrentStudentId(),
+          studentId: currentChild.id,
           subject: subject,
           topic: topic,
           sessionType: 'practice' as 'practice'
@@ -210,8 +190,10 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   };
 
   React.useEffect(() => {
-    getNewQuestion().catch(console.error);
-  }, [topic]);
+    if (currentChild) {
+      getNewQuestion().catch(console.error);
+    }
+  }, [topic, currentChild]);
 
   const checkAnswer = (userAnswer: string): boolean => {
     if (!userAnswer || !currentQuestion?.correctAnswer) return false;
