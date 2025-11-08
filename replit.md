@@ -35,6 +35,20 @@ A comprehensive web-based AI tutoring platform supporting both US (K-13) and Car
 - Session tracking now properly authenticates using JWT cookies
 - All session APIs (start, end, abandon, problem-attempt) now work correctly
 
+### Homepage Redesign (November 8, 2025) ✅
+- Redesigned landing page with engaging hero images of Caribbean students
+- Added comprehensive feature descriptions highlighting:
+  - AI-powered personalized tutoring with grade-level adaptation
+  - Caribbean curriculum alignment (Infant 1 - Form 6, Common Entrance, SEA, CSEC, CAPE)
+  - Progress tracking and parent dashboards
+  - Gamification with XP, badges, and leaderboards
+  - Adaptive learning with uploaded curriculum integration
+  - Parent engagement tools (goals, notifications, insights)
+- Added "How It Works" section with step-by-step onboarding
+- Created separate benefit sections for students and parents
+- Implemented strong calls-to-action with "Start Free Trial" buttons
+- Maintained mobile-responsive design with hover effects and animations
+
 ### Demo Accounts
 - **Parents**: parent.johnson@demo.com, parent.williams@demo.com, parent.garcia@demo.com (password: demo123)
 - Each parent has 2 children with real progress data in database
