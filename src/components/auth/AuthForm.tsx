@@ -303,8 +303,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
           </p>
         </div>
 
-        {/* Hero Images */}
-        <div className="grid md:grid-cols-2 gap-8 mb-16 max-w-6xl mx-auto">
+        {/* Hero Image */}
+        <div className="max-w-4xl mx-auto mb-16">
           <div className="relative overflow-hidden rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
             <img 
               src={heroImage1} 
@@ -312,17 +312,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
               className="w-full h-auto"
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6">
-              <p className="text-white font-semibold text-lg">Engaging Interactive Learning</p>
-            </div>
-          </div>
-          <div className="relative overflow-hidden rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
-            <img 
-              src={heroImage2} 
-              alt="Students achieving success" 
-              className="w-full h-auto"
-            />
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6">
-              <p className="text-white font-semibold text-lg">Building Confidence & Success</p>
+              <p className="text-white font-semibold text-xl">Engaging Interactive Learning</p>
             </div>
           </div>
         </div>
@@ -487,6 +477,20 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
                 <h4 className="font-bold text-lg mb-1">Track Progress & Earn Rewards</h4>
                 <p className="text-gray-600">Students earn XP and badges while parents monitor progress through detailed dashboards and email updates.</p>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Second Hero Image */}
+        <div className="max-w-4xl mx-auto mb-16">
+          <div className="relative overflow-hidden rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
+            <img 
+              src={heroImage2} 
+              alt="Students achieving success with AI tutoring" 
+              className="w-full h-auto"
+            />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6">
+              <p className="text-white font-semibold text-xl">Building Confidence & Success</p>
             </div>
           </div>
         </div>
