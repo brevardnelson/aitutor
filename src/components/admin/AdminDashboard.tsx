@@ -8,11 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, School, GraduationCap, UserPlus, Building } from 'lucide-react';
+import { Users, School, GraduationCap, UserPlus, Building, FileText } from 'lucide-react';
 
 import { SchoolManagement } from './SchoolManagement';
 import { UserManagement } from './UserManagement';
 import { SystemOverview } from './SystemOverview';
+import DocumentManagement from './DocumentManagement';
 
 export const AdminDashboard: React.FC = () => {
   const { user, currentSchool, availableSchools, hasRole } = useRBAC();
@@ -59,7 +60,7 @@ export const AdminDashboard: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Building className="h-4 w-4" />
               Overview
@@ -76,6 +77,13 @@ export const AdminDashboard: React.FC = () => {
               <TabsTrigger value="users" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Users
+              </TabsTrigger>
+            </RoleGuard>
+
+            <RoleGuard roles={['system_admin', 'school_admin']} fallback={null}>
+              <TabsTrigger value="curriculum" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Curriculum
               </TabsTrigger>
             </RoleGuard>
 
@@ -104,6 +112,13 @@ export const AdminDashboard: React.FC = () => {
             <PermissionGuard permissions={[PERMISSIONS.MANAGE_TEACHERS, PERMISSIONS.MANAGE_PARENTS, PERMISSIONS.MANAGE_STUDENTS]}>
               <UserManagement />
             </PermissionGuard>
+          </TabsContent>
+
+          {/* Curriculum & Documents Tab (System Admin, School Admin) */}
+          <TabsContent value="curriculum">
+            <RoleGuard roles={['system_admin', 'school_admin']}>
+              <DocumentManagement />
+            </RoleGuard>
           </TabsContent>
 
           {/* Classes Tab (School Admin, Teachers) */}
