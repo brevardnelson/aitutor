@@ -13,6 +13,7 @@ import { authenticateToken } from './auth-middleware';
 import { verifyChildAccess, verifyStudentAccess, verifySessionAccess } from './resource-authorization';
 import { validateParamIds, validateBodyIds, getValidatedId } from './id-validation-middleware';
 import { storage } from './storage';
+import { seedDemoDataIfEmpty } from './seed-demo-data';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -469,6 +470,8 @@ app.listen(PORT, async () => {
   console.log(`🚀 Dashboard API server running on port ${PORT}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
   
+  await seedDemoDataIfEmpty();
+
   // Initialize automation systems in parallel
   await Promise.all([
     initializeChallengeScheduler(),
