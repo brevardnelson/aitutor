@@ -3,8 +3,20 @@ import { db } from './storage';
 import * as schema from '../shared/schema';
 import { sql } from 'drizzle-orm';
 
+async function ensureSchemaColumns() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS school_id INTEGER REFERENCES schools(id);
+    `);
+    console.log('✅ Schema columns verified');
+  } catch (e) {
+    console.log('Schema column check skipped (may already exist)');
+  }
+}
+
 export async function seedDemoDataIfEmpty() {
   try {
+    await ensureSchemaColumns();
     const existingUsers = await db.select({ id: schema.users.id }).from(schema.users).limit(1);
     if (existingUsers.length > 0) {
       console.log('Database already has users, skipping seed.');
