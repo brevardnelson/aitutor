@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { dashboardAPI } from './api';
 import authRoutes from './auth-routes';
 import adminRoutes from './admin-routes';
@@ -445,6 +447,19 @@ async function initializeLeaderboardScheduler() {
     // Retry in 5 minutes if initialization fails
     setTimeout(initializeLeaderboardScheduler, 5 * 60 * 1000);
   }
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const distPath = path.resolve(__dirname, '../dist');
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
 }
 
 // Start server with comprehensive automation systems
