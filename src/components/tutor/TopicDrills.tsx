@@ -38,7 +38,7 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
   const [isComplete, setIsComplete] = useState(false);
   const [score, setScore] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
-  const usedQuestionIds = useRef<Set<string>>(new Set());
+  const usedQuestions = useRef<Set<string>>(new Set());
 
   const totalQuestions = 5;
 
@@ -85,14 +85,14 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
     
     if (allQuestions.length === 0) return;
 
-    let available = allQuestions.filter(q => !usedQuestionIds.current.has(q.id));
+    let available = allQuestions.filter(q => !usedQuestions.current.has(q.question));
     if (available.length === 0) {
-      usedQuestionIds.current.clear();
+      usedQuestions.current.clear();
       available = allQuestions;
     }
 
     const question = available[Math.floor(Math.random() * available.length)];
-    usedQuestionIds.current.add(question.id);
+    usedQuestions.current.add(question.question);
 
     const shuffledOptions = shuffleArray(question.options);
     setCurrentQuestion({ ...question, options: shuffledOptions });
@@ -179,7 +179,7 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
     setResults([]);
     setScore(0);
     setIsComplete(false);
-    usedQuestionIds.current.clear();
+    usedQuestions.current.clear();
     loadNewQuestion();
   };
 
