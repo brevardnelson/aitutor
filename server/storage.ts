@@ -447,12 +447,16 @@ export class DashboardStorage {
       )
       ON CONFLICT (student_id, date) 
       DO UPDATE SET
-        total_time = EXCLUDED.total_time,
-        sessions_count = EXCLUDED.sessions_count,
+        total_time = daily_activity.total_time + EXCLUDED.total_time,
+        sessions_count = daily_activity.sessions_count + EXCLUDED.sessions_count,
         topics_worked = EXCLUDED.topics_worked,
-        problems_attempted = EXCLUDED.problems_attempted,
-        problems_completed = EXCLUDED.problems_completed,
-        accuracy_rate = EXCLUDED.accuracy_rate
+        problems_attempted = daily_activity.problems_attempted + EXCLUDED.problems_attempted,
+        problems_completed = daily_activity.problems_completed + EXCLUDED.problems_completed,
+        accuracy_rate = CASE 
+          WHEN (daily_activity.problems_attempted + EXCLUDED.problems_attempted) > 0 
+          THEN ROUND(((daily_activity.problems_completed + EXCLUDED.problems_completed)::numeric / (daily_activity.problems_attempted + EXCLUDED.problems_attempted)::numeric) * 100)
+          ELSE 0 
+        END
     `;
     
     // Wire up challenge auto-tracking for time and streak challenges
@@ -858,6 +862,17 @@ export class DashboardStorage {
             updated_at = CURRENT_TIMESTAMP
         WHERE student_id = ${studentId}
       `;
+
+      try {
+        const { onXPEarned, onStudentLevelUp } = await import('./gamification-hooks');
+        await onXPEarned(studentId, transaction.amount, transaction.source);
+        const oldLevel = xpData.level || 1;
+        if (newLevel > oldLevel) {
+          await onStudentLevelUp(studentId, newLevel, transaction.amount);
+        }
+      } catch (hookErr) {
+        console.error('Gamification hook error in earnXP:', hookErr);
+      }
     };
 
     if (connection) {
