@@ -136,30 +136,23 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   }, [topic, subject, sessionStarted, currentChild]);
 
   // Helper function to end session properly with aggregates
-  const endSessionWithMetrics = async (reason: string = 'Session completed') => {
-    if (!learningTracker.isSessionActive()) {
-      console.log('No active session to end');
-      return;
-    }
+  const metricsRef = React.useRef({ problemsAttempted: 0, problemsCompleted: 0, correctAnswers: 0, totalHintsUsed: 0 });
+  React.useEffect(() => {
+    metricsRef.current = { problemsAttempted, problemsCompleted, correctAnswers, totalHintsUsed };
+  }, [problemsAttempted, problemsCompleted, correctAnswers, totalHintsUsed]);
 
+  const endSessionWithMetrics = async (reason: string = 'Session completed') => {
+    if (!learningTracker.isSessionActive()) return;
+    const m = metricsRef.current;
     try {
-      // REQUIREMENT 2: End session with proper aggregate metrics
       await learningTracker.endSession({
-        problemsAttempted,
-        problemsCompleted, 
-        correctAnswers,
-        hintsUsed: totalHintsUsed
-      });
-      
-      console.log(`GuidedTutor session ended: ${reason}`, {
-        problemsAttempted,
-        problemsCompleted,
-        correctAnswers,
-        hintsUsed: totalHintsUsed
+        problemsAttempted: m.problemsAttempted,
+        problemsCompleted: m.problemsCompleted,
+        correctAnswers: m.correctAnswers,
+        hintsUsed: m.totalHintsUsed
       });
     } catch (error) {
       console.error('Error ending GuidedTutor session:', error);
-      // Fallback to abandon if endSession fails
       try {
         await learningTracker.abandonSession(reason);
       } catch (abandonError) {
@@ -168,15 +161,13 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     }
   };
 
-  // Cleanup effect to handle unmounting with proper session closure
   React.useEffect(() => {
     return () => {
-      // REQUIREMENT 2: Use endSession with aggregates instead of abandonSession
       if (learningTracker.isSessionActive()) {
         endSessionWithMetrics('GuidedTutor component unmounted').catch(console.error);
       }
     };
-  }, [problemsAttempted, problemsCompleted, correctAnswers, totalHintsUsed]);
+  }, []);
 
   const getNewQuestion = async () => {
     if (!topic) return;
@@ -282,17 +273,17 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       return;
     }
     
-    // REQUIREMENT 1: Log EVERY submission - increment attempts and problemsAttempted
+    // Increment attempts on every submission
     setAttempts(prev => prev + 1);
     setProblemsAttempted(prev => prev + 1);
     
     // Check if this is the final correct answer
     if (checkAnswer(userInput)) {
-      // REQUIREMENT 3: Update aggregate counters
+      // Update aggregate counters
       setCorrectAnswers(prev => prev + 1);
       setProblemsCompleted(prev => prev + 1);
       
-      // REQUIREMENT 1: Log the successful final answer completion
+      // Log the successful final answer completion
       if (sessionStarted) {
         try {
           await learningTracker.recordProblemAttempt(
@@ -330,7 +321,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       return;
     }
     
-    // REQUIREMENT 1: Log incorrect final answer attempts
+    // Log incorrect final answer attempts
     if (sessionStarted) {
       try {
         await learningTracker.recordProblemAttempt(
@@ -364,7 +355,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
         topic || 'math'
       );
       
-      // REQUIREMENT 1: Record ALL step-level attempts (both correct and incorrect)
+      // Record step-level attempts
       if (sessionStarted) {
         try {
           await learningTracker.recordProblemAttempt(
@@ -417,7 +408,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     } catch (error) {
       console.error('StepValidator error:', error);
       
-      // REQUIREMENT 1: Still log failed validation attempts
+      // Log failed validation attempts
       if (sessionStarted) {
         try {
           await learningTracker.recordProblemAttempt(

@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppContext } from '@/contexts/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, User, BookOpen, TrendingUp, LogOut, Trophy, Bell } from 'lucide-react';
+import { Plus, User, BookOpen, TrendingUp, LogOut, Trophy, Bell, Star, Flame, Award } from 'lucide-react';
 import AddChildForm from './AddChildForm';
 import ChildCard from './ChildCard';
 import UnenrolledChildCard from './UnenrolledChildCard';
@@ -12,6 +12,52 @@ import ParentNotifications from '../parent/ParentNotifications';
 import ParentBadges from '../parent/ParentBadges';
 import RedemptionRecommendations from '../parent/RedemptionRecommendations';
 import { childrenAPI } from '@/lib/api-children';
+
+const ChildGamificationCard: React.FC<{ childId: number; childName: string }> = ({ childId, childName }) => {
+  const [data, setData] = useState<{ totalXP: number; level: number; badgeCount: number; streak: number }>({ totalXP: 0, level: 1, badgeCount: 0, streak: 0 });
+
+  useEffect(() => {
+    const token = localStorage.getItem('caribbeanAI_token');
+    if (!token) return;
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    Promise.all([
+      fetch(`/api/gamification/xp/${childId}`, { headers }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/gamification/badges/student/${childId}`, { headers }).then(r => r.ok ? r.json() : null),
+    ]).then(([xpData, badgesData]) => {
+      setData({
+        totalXP: xpData?.totalXP || xpData?.total_xp || 0,
+        level: xpData?.level || 1,
+        badgeCount: Array.isArray(badgesData) ? badgesData.filter((b: { earnedAt?: string; earned_at?: string }) => b.earnedAt || b.earned_at).length : 0,
+        streak: xpData?.currentStreak || xpData?.current_streak || 0,
+      });
+    }).catch(console.error);
+  }, [childId]);
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <h4 className="font-semibold text-gray-900 mb-3">{childName}</h4>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="bg-yellow-50 rounded-lg p-2">
+            <Star className="h-4 w-4 text-yellow-500 mx-auto mb-1" />
+            <div className="font-bold text-yellow-700">{data.totalXP}</div>
+            <div className="text-xs text-yellow-600">XP (Lv{data.level})</div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-2">
+            <Award className="h-4 w-4 text-purple-500 mx-auto mb-1" />
+            <div className="font-bold text-purple-700">{data.badgeCount}</div>
+            <div className="text-xs text-purple-600">Badges</div>
+          </div>
+          <div className="bg-orange-50 rounded-lg p-2">
+            <Flame className="h-4 w-4 text-orange-500 mx-auto mb-1" />
+            <div className="font-bold text-orange-700">{data.streak}d</div>
+            <div className="text-xs text-orange-600">Streak</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 interface DashboardProps {
   onStartLearning: () => void;
@@ -275,6 +321,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
               <ParentBadges userId={user.id} />
             </div>
             
+            {/* Per-Child Gamification Summary */}
+            {children.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-2xl font-bold text-gray-900">Student Progress</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {children.map(child => (
+                    <ChildGamificationCard key={child.id} childId={child.id} childName={child.name} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Redemption Recommendations for each child */}
             <div className="space-y-8">
               <h3 className="text-2xl font-bold text-gray-900">Smart Reward Recommendations</h3>

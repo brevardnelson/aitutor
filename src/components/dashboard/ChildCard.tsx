@@ -36,7 +36,7 @@ const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning, onViewAna
     ]).then(([xpData, badgesData]) => {
       setGamification({
         totalXP: xpData?.totalXP || xpData?.total_xp || 0,
-        badgeCount: Array.isArray(badgesData) ? badgesData.filter((b: any) => b.earnedAt || b.earned_at).length : 0,
+        badgeCount: Array.isArray(badgesData) ? badgesData.filter((b: { earnedAt?: string; earned_at?: string }) => b.earnedAt || b.earned_at).length : 0,
         streak: xpData?.currentStreak || xpData?.current_streak || 0,
       });
     }).catch(e => console.error('Failed to load child gamification:', e));

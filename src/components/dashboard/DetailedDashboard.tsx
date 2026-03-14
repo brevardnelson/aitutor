@@ -50,7 +50,7 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
 }) => {
   const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [gamification, setGamification] = useState<{ totalXP: number; level: number; badgeCount: number; badges: any[]; streak: number }>({ totalXP: 0, level: 1, badgeCount: 0, badges: [], streak: 0 });
+  const [gamification, setGamification] = useState<{ totalXP: number; level: number; badgeCount: number; badges: { name?: string; badge_name?: string; icon?: string }[]; streak: number }>({ totalXP: 0, level: 1, badgeCount: 0, badges: [], streak: 0 });
   
   // Chart data state
   const [progressData, setProgressData] = useState<ProgressChartData[]>([]);
@@ -107,7 +107,7 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
           fetch(`/api/gamification/xp/${childId}`, { headers }).then(r => r.ok ? r.json() : null),
           fetch(`/api/gamification/badges/student/${childId}`, { headers }).then(r => r.ok ? r.json() : null),
         ]);
-        const earnedBadges = Array.isArray(badgesData) ? badgesData.filter((b: any) => b.earnedAt || b.earned_at) : [];
+        const earnedBadges = Array.isArray(badgesData) ? badgesData.filter((b: { earnedAt?: string; earned_at?: string }) => b.earnedAt || b.earned_at) : [];
         setGamification({
           totalXP: xpData?.totalXP || xpData?.total_xp || 0,
           level: xpData?.level || 1,
@@ -275,7 +275,7 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
                   <p className="text-sm text-purple-700">Badges Earned</p>
                   <p className="text-2xl font-bold text-purple-800">{gamification.badgeCount}</p>
                   <div className="flex gap-1 mt-1">
-                    {gamification.badges.map((b: any, i: number) => (
+                    {gamification.badges.map((b, i) => (
                       <span key={i} className="text-lg" title={b.name || b.badge_name}>{b.icon || '🏅'}</span>
                     ))}
                   </div>
