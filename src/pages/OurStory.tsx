@@ -35,7 +35,7 @@ const OurStory = () => {
                 At Nelsonian Solutions, we saw an opportunity to change this. We asked ourselves: what if every child in the Caribbean — whether in bustling Port of Spain, rural Jamaica, or the smaller islands of the Eastern Caribbean — could have a patient, knowledgeable tutor available 24 hours a day, 7 days a week? A tutor that never gets tired, never loses patience, and adapts to each student's unique learning pace?
               </p>
 
-              <div className="flex items-center gap-3 mb-6">
+              <div id="approach" className="flex items-center gap-3 mb-6">
                 <div className="bg-green-100 p-3 rounded-full">
                   <Lightbulb className="h-6 w-6 text-green-600" />
                 </div>

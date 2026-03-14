@@ -34,7 +34,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
                 <span className="text-lg font-semibold text-gray-900">Caribbean AI Tutor</span>
               </Link>
               <div className="flex items-center space-x-3">
-                <Link to="/">
+                <Link to="/?login=true">
                   <Button variant="ghost" size="sm">Log In</Button>
                 </Link>
                 <Link to="/?signup=true">

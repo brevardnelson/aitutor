@@ -25,7 +25,7 @@ const PublicHeader = () => {
               </>
             ) : (
               <>
-                <Link to="/">
+                <Link to="/?login=true">
                   <Button variant="ghost" size="sm">Log In</Button>
                 </Link>
                 <Link to="/?signup=true">

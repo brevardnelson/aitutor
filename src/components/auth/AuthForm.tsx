@@ -22,7 +22,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showAuthForm, setShowAuthForm] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('signup') === 'true';
+    return params.get('signup') === 'true' || params.get('login') === 'true';
+  });
+  const [defaultTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('login') === 'true' ? 'signin' : 'signup';
   });
   const [signInData, setSignInData] = useState({
     email: '',
@@ -144,7 +148,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
               <CardDescription>Sign in to your account or create a new one</CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="signup" className="w-full">
+              <Tabs defaultValue={defaultTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="signin" data-testid="tab-signin">Sign In</TabsTrigger>
                   <TabsTrigger value="signup" data-testid="tab-signup">Sign Up</TabsTrigger>
