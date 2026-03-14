@@ -329,10 +329,19 @@ export class DashboardStorage {
           sessionId: attempt.sessionId,
           idempotencyKey
         });
+
+        await this.checkAndAwardBadges(attempt.studentId, {
+          action: 'problem_completed',
+          metadata: {
+            problemId: attempt.problemId,
+            difficulty: attempt.difficulty,
+            subject: attempt.subject,
+            topic: attempt.topic,
+          }
+        });
         
       } catch (error) {
         console.error('Failed to award XP for problem completion:', error);
-        // Don't throw - we don't want to break the learning flow
       }
     }
     

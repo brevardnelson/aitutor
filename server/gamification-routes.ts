@@ -446,8 +446,8 @@ export function registerGamificationRoutes(app: Express): void {
           });
         }
         
-        // TODO: Look up challenge XP reward from database
-        actualXP = 50; // Default challenge completion XP
+        const challengeRecord = await storage.getChallengeById?.(metadata.challengeId);
+        actualXP = challengeRecord?.xpReward || 50;
         description = 'Admin award: Challenge completed!';
         
       } else {

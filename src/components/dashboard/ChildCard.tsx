@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAppContext } from '@/contexts/AppContext';
-import { User, Play, BarChart3 } from 'lucide-react';
+import { User, Play, BarChart3, Trophy, Star, Flame } from 'lucide-react';
 
 interface Child {
   id: number;
@@ -23,7 +23,25 @@ interface ChildCardProps {
 
 const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning, onViewAnalytics }) => {
   const { selectChild, selectedSubject, getChildProgress } = useAppContext();
+  const [gamification, setGamification] = useState<{ totalXP: number; badgeCount: number; streak: number }>({ totalXP: 0, badgeCount: 0, streak: 0 });
   
+  useEffect(() => {
+    const token = localStorage.getItem('caribbeanAI_token');
+    if (!token) return;
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    Promise.all([
+      fetch(`/api/gamification/xp/${child.id}`, { headers }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/gamification/badges/student/${child.id}`, { headers }).then(r => r.ok ? r.json() : null),
+    ]).then(([xpData, badgesData]) => {
+      setGamification({
+        totalXP: xpData?.totalXP || xpData?.total_xp || 0,
+        badgeCount: Array.isArray(badgesData) ? badgesData.filter((b: any) => b.earnedAt || b.earned_at).length : 0,
+        streak: xpData?.currentStreak || xpData?.current_streak || 0,
+      });
+    }).catch(e => console.error('Failed to load child gamification:', e));
+  }, [child.id]);
+
   // Get progress for current subject only
   const currentSubject = selectedSubject || 'math';
   const childProgress = getChildProgress(child.id).filter(p => p.subject === currentSubject);
@@ -101,6 +119,21 @@ const ChildCard: React.FC<ChildCardProps> = ({ child, onStartLearning, onViewAna
               {childProgress.filter(p => p.completed === p.total).length}
             </div>
             <div className="text-green-600">Completed</div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-sm bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-3">
+          <div className="flex items-center gap-1.5">
+            <Star className="h-4 w-4 text-yellow-500" />
+            <span className="font-semibold text-yellow-700">{gamification.totalXP} XP</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Trophy className="h-4 w-4 text-purple-500" />
+            <span className="font-semibold text-purple-700">{gamification.badgeCount}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Flame className="h-4 w-4 text-orange-500" />
+            <span className="font-semibold text-orange-700">{gamification.streak}d</span>
           </div>
         </div>
         
