@@ -47,7 +47,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   const [userInput, setUserInput] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
-  const [hintsShown, setHintsShown] = useState<number[]>([]);
+  const [hintIndex, setHintIndex] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [hintsUsed, setHintsUsed] = useState(0);
@@ -196,7 +196,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     setCurrentStep(0);
     setIsComplete(false);
     setUserInput('');
-    setHintsShown([]);
+    setHintIndex(0);
     setIsValidating(false);
     setAttempts(0); // Reset attempts for new question
     setHintsUsed(0); // Reset hints for new question
@@ -244,19 +244,14 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   };
 
   const getNextHint = (): string => {
-    if (!currentQuestion?.hints || !currentQuestion.hints[currentStep]) {
+    if (!currentQuestion?.hints || currentQuestion.hints.length === 0) {
       return 'Think about the mathematical operation needed.';
     }
     
-    const hints = currentQuestion.hints[currentStep].split('|') || ['Think about the mathematical operation needed.'];
-    const hintIndex = hintsShown.filter(h => Math.floor(h / 10) === currentStep).length;
-    
-    if (hintIndex < hints.length) {
-      setHintsShown(prev => [...prev, currentStep * 10 + hintIndex]);
-      return hints[hintIndex];
-    }
-    
-    return hints[hints.length - 1] || 'Think about the mathematical operation needed.';
+    const hints = currentQuestion.hints;
+    const idx = Math.min(hintIndex, hints.length - 1);
+    setHintIndex(prev => prev + 1);
+    return hints[idx];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

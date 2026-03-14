@@ -78,12 +78,18 @@ const DrillQuestion: React.FC<DrillQuestionProps> = ({
     return wrongAnswers.slice(0, 3);
   };
 
-  // If options are not provided or don't look realistic, generate them
-  const finalOptions = options && options.length === 4 ? options : (() => {
+  const finalOptions = (() => {
+    if (options && options.length === 4) {
+      return options;
+    }
     if (correctAnswer) {
       const wrongAnswers = generateRealisticWrongAnswers(correctAnswer, topic);
       const allOptions = [correctAnswer, ...wrongAnswers];
-      return allOptions.sort(() => Math.random() - 0.5);
+      for (let i = allOptions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
+      }
+      return allOptions;
     }
     return options;
   })();

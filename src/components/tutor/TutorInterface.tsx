@@ -88,14 +88,6 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
         return (
           <div>
             <div className="mb-6">
-              <Button 
-                variant="outline" 
-                onClick={() => setViewMode('topics')}
-                className="flex items-center gap-2 mb-4"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Topics
-              </Button>
               <div className="flex items-center gap-3">
                 <BookOpen className="h-6 w-6 text-blue-600" />
                 <h2 className="text-2xl font-bold text-gray-900">{selectedTopic}</h2>
@@ -108,16 +100,6 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
       case 'practice-selector':
         return (
           <div>
-            <div className="mb-6">
-              <Button 
-                variant="outline" 
-                onClick={() => setViewMode('topics')}
-                className="flex items-center gap-2 mb-4"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Topics
-              </Button>
-            </div>
             <PracticeTestSelector onStartTest={handleStartTest} />
           </div>
         );
@@ -136,16 +118,6 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
       case 'admin':
         return (
           <div>
-            <div className="mb-6">
-              <Button 
-                variant="outline" 
-                onClick={() => setViewMode('topics')}
-                className="flex items-center gap-2 mb-4"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Topics
-              </Button>
-            </div>
             <CurriculumUpload />
           </div>
         );
@@ -161,14 +133,16 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <Button 
-              variant="outline" 
-              onClick={() => setViewMode('topics')}
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Topics
-            </Button>
+            {viewMode !== 'topics' && (
+              <Button 
+                variant="outline" 
+                onClick={() => setViewMode('topics')}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Topics
+              </Button>
+            )}
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
                 {currentChild.name}'s Learning Session

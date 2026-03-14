@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import DrillQuestion from './DrillQuestion';
-import { drillContent, DrillTopicKey, getRandomDrillQuestion } from './DrillContent';
+import { drillContent, DrillTopicKey } from './DrillContent';
 import { CheckCircle, XCircle, RotateCcw, Trophy } from 'lucide-react';
 import { learningTracker, LearningTracker } from '@/services/learning-tracker';
 
@@ -20,6 +20,15 @@ interface DrillResult {
   isCorrect: boolean;
 }
 
+const shuffleArray = <T,>(arr: T[]): T[] => {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
   const [currentQuestion, setCurrentQuestion] = useState<any>(null);
   const [selectedAnswer, setSelectedAnswer] = useState('');
@@ -29,6 +38,7 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
   const [isComplete, setIsComplete] = useState(false);
   const [score, setScore] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const usedQuestionIds = useRef<Set<string>>(new Set());
 
   const totalQuestions = 5;
 
@@ -71,13 +81,23 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
 
   const loadNewQuestion = () => {
     const topicKey = topic as DrillTopicKey;
-    const question = getRandomDrillQuestion(topicKey);
+    const allQuestions = drillContent[topicKey] || [];
     
-    if (question) {
-      setCurrentQuestion(question);
-      setSelectedAnswer('');
-      setShowFeedback(false);
+    if (allQuestions.length === 0) return;
+
+    let available = allQuestions.filter(q => !usedQuestionIds.current.has(q.id));
+    if (available.length === 0) {
+      usedQuestionIds.current.clear();
+      available = allQuestions;
     }
+
+    const question = available[Math.floor(Math.random() * available.length)];
+    usedQuestionIds.current.add(question.id);
+
+    const shuffledOptions = shuffleArray(question.options);
+    setCurrentQuestion({ ...question, options: shuffledOptions });
+    setSelectedAnswer('');
+    setShowFeedback(false);
   };
 
   const handleAnswerSelect = (answer: string) => {
@@ -159,6 +179,7 @@ const TopicDrills: React.FC<TopicDrillsProps> = ({ topic, onComplete }) => {
     setResults([]);
     setScore(0);
     setIsComplete(false);
+    usedQuestionIds.current.clear();
     loadNewQuestion();
   };
 

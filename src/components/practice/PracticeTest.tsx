@@ -32,6 +32,15 @@ interface Problem {
   id: string;
 }
 
+const shuffleArray = <T,>(arr: T[]): T[] => {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 const PracticeTest: React.FC<PracticeTestProps> = ({ type, topics, problemCount, onComplete, onBack }) => {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -123,18 +132,17 @@ const PracticeTest: React.FC<PracticeTestProps> = ({ type, topics, problemCount,
         if (!usedIds.has(baseProblem.id)) {
           const wrongAnswers = generateWrongAnswers(baseProblem.correctAnswer, topic);
           const allOptions = [baseProblem.correctAnswer, ...wrongAnswers];
-          const shuffledOptions = allOptions.sort(() => Math.random() - 0.5);
           
           selectedProblems.push({
             ...baseProblem,
-            options: shuffledOptions
+            options: shuffleArray(allOptions)
           });
           usedIds.add(baseProblem.id);
         }
       }
     });
 
-    const finalProblems = selectedProblems.sort(() => Math.random() - 0.5);
+    const finalProblems = shuffleArray(selectedProblems);
     setProblems(finalProblems);
     setUserAnswers(new Array(finalProblems.length).fill(''));
   };
