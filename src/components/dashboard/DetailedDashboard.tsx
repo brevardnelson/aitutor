@@ -17,7 +17,9 @@ import {
   BookOpen,
   Trophy,
   ArrowLeft,
-  Download
+  Download,
+  Star,
+  Flame
 } from 'lucide-react';
 import { dashboardService } from '../../services/dashboard-service';
 import type { DashboardSummary } from '../../types/dashboard-metrics';
@@ -48,6 +50,7 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
 }) => {
   const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gamification, setGamification] = useState<{ totalXP: number; level: number; badgeCount: number; badges: any[]; streak: number }>({ totalXP: 0, level: 1, badgeCount: 0, badges: [], streak: 0 });
   
   // Chart data state
   const [progressData, setProgressData] = useState<ProgressChartData[]>([]);
@@ -93,6 +96,27 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
       } finally {
         setLoading(false);
         setChartsLoading(false);
+      }
+
+      try {
+        const token = localStorage.getItem('caribbeanAI_token');
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const [xpData, badgesData] = await Promise.all([
+          fetch(`/api/gamification/xp/${childId}`, { headers }).then(r => r.ok ? r.json() : null),
+          fetch(`/api/gamification/badges/student/${childId}`, { headers }).then(r => r.ok ? r.json() : null),
+        ]);
+        const earnedBadges = Array.isArray(badgesData) ? badgesData.filter((b: any) => b.earnedAt || b.earned_at) : [];
+        setGamification({
+          totalXP: xpData?.totalXP || xpData?.total_xp || 0,
+          level: xpData?.level || 1,
+          badgeCount: earnedBadges.length,
+          badges: earnedBadges.slice(0, 5),
+          streak: xpData?.currentStreak || xpData?.current_streak || 0,
+        });
+      } catch (e) {
+        console.error('Failed to load gamification data:', e);
       }
     };
 
@@ -220,6 +244,56 @@ const DetailedDashboard: React.FC<DetailedDashboardProps> = ({
                   <p className="text-xs text-orange-200">Common Entrance</p>
                 </div>
                 <Trophy className="h-8 w-8 text-orange-200" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Gamification Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="border-yellow-200 bg-gradient-to-br from-yellow-50 to-amber-50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-yellow-100 rounded-full">
+                  <Star className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-yellow-700">Total XP</p>
+                  <p className="text-2xl font-bold text-yellow-800">{gamification.totalXP.toLocaleString()}</p>
+                  <p className="text-xs text-yellow-600">Level {gamification.level}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-violet-50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-100 rounded-full">
+                  <Award className="h-6 w-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-purple-700">Badges Earned</p>
+                  <p className="text-2xl font-bold text-purple-800">{gamification.badgeCount}</p>
+                  <div className="flex gap-1 mt-1">
+                    {gamification.badges.map((b: any, i: number) => (
+                      <span key={i} className="text-lg" title={b.name || b.badge_name}>{b.icon || '🏅'}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-red-50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-orange-100 rounded-full">
+                  <Flame className="h-6 w-6 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-orange-700">Daily Streak</p>
+                  <p className="text-2xl font-bold text-orange-800">{gamification.streak} days</p>
+                  <p className="text-xs text-orange-600">{gamification.streak > 0 ? 'Keep it up!' : 'Start learning today!'}</p>
+                </div>
               </div>
             </CardContent>
           </Card>

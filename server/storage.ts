@@ -1917,6 +1917,12 @@ export class DashboardStorage {
           const awarded = await this.awardBadge(studentId, badge.id, context.metadata);
           if (awarded) {
             awardedBadges.push(badge.id);
+            try {
+              const { onStudentBadgeEarned } = await import('./gamification-hooks');
+              await onStudentBadgeEarned(studentId, badge.id);
+            } catch (e) {
+              console.error('Badge hook error:', e);
+            }
           }
         }
       } catch (error) {

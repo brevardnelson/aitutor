@@ -319,21 +319,29 @@ export class DashboardAPI {
 
     try {
       const session = await storage.sql`
-        SELECT student_id FROM learning_sessions WHERE id = ${sessionId} LIMIT 1
+        SELECT student_id, subject, topic FROM learning_sessions WHERE id = ${sessionId} LIMIT 1
       `;
       if (session[0]?.student_id) {
         const studentId = session[0].student_id;
         const today = new Date().toISOString().split('T')[0];
+        const accuracy = problemsAttempted > 0 ? Math.round((correctAnswers / problemsAttempted) * 100) : 0;
         await storage.updateDailyActivity(studentId, today, {
-          sessionsCompleted: 1,
+          sessionsCount: 1,
           problemsAttempted,
-          problemsCorrect: correctAnswers,
-          timeSpent: duration,
+          problemsCompleted,
+          totalTime: duration,
+          accuracyRate: accuracy,
+          topicsWorked: session[0].topic ? [session[0].topic] : [],
         });
         await storage.checkAndAwardBadges(studentId, {
           action: 'problem_completed',
           metadata: { sessionId, problemsCompleted, correctAnswers },
         });
+        const { onXPEarned } = await import('./gamification-hooks');
+        if (correctAnswers > 0) {
+          const sessionXP = correctAnswers * 10;
+          await onXPEarned(studentId, sessionXP, 'session_completion');
+        }
       }
     } catch (error) {
       console.error('Failed to run post-session gamification:', error);
