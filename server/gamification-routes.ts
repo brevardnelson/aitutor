@@ -20,7 +20,7 @@ const XP_CONSTANTS = {
 const EarnXPSchema = z.object({
   studentId: z.number(),
   source: z.enum(['problem_completion', 'no_hints_bonus', 'streak_bonus', 'challenge_completion']),
-  // SECURITY FIX: Removed client-controlled amount parameter - XP now calculated server-side only
+  // XP calculated server-side only
   metadata: z.object({
     problemId: z.string().optional(),
     difficulty: z.enum(['easy', 'medium', 'hard']).optional(),
@@ -163,7 +163,7 @@ export function registerGamificationRoutes(app: Express): void {
         return res.status(400).json({ error: 'Student ID and badge ID required' });
       }
 
-      // SECURITY FIX: Only system admins OR teachers with proper student access can update badge progress
+      // Only system admins or teachers with proper student access can update badge progress
       if (!req.user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
@@ -174,7 +174,7 @@ export function registerGamificationRoutes(app: Express): void {
         return res.status(403).json({ error: 'Access denied - only teachers and admins can update badge progress' });
       }
 
-      // SECURITY FIX: Remove client-controlled progress - progress should be calculated server-side
+      // Progress is calculated server-side
       // Badge progress should only be updated based on verified student activities, not arbitrary client input
       return res.status(400).json({ 
         error: 'Direct progress manipulation not allowed. Badge progress is automatically calculated from verified student activities.' 
@@ -415,13 +415,13 @@ export function registerGamificationRoutes(app: Express): void {
     }
   });
 
-  // SECURITY FIX: XP earning now restricted to system admins only with server-side verification
+  // XP earning restricted to system admins with server-side verification
   app.post('/api/gamification/xp/earn', authenticateToken, async (req, res) => {
     try {
       const validatedData = EarnXPSchema.parse(req.body);
       const { studentId, source, metadata } = validatedData;
 
-      // SECURITY FIX: Only system administrators can manually award XP
+      // Only system administrators can manually award XP
       if (!req.user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
@@ -432,7 +432,7 @@ export function registerGamificationRoutes(app: Express): void {
         });
       }
 
-      // SECURITY FIX: Calculate XP amounts purely server-side based on verified activities
+      // Calculate XP amounts server-side based on verified activities
       let actualXP = 0;
       let description = '';
 
@@ -605,7 +605,7 @@ export function registerGamificationRoutes(app: Express): void {
         return res.status(401).json({ error: 'Authentication required' });
       }
       
-      // CRITICAL SECURITY FIX: Enforce proper scoping requirements and access checks
+      // Enforce proper scoping requirements and access checks
       if (scope === 'class') {
         if (!classId) {
           return res.status(400).json({ error: 'classId is required when scope is "class"' });
@@ -682,7 +682,7 @@ export function registerGamificationRoutes(app: Express): void {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      // CRITICAL FIX: Use proper getLeaderboardById method instead of broken getLeaderboardHistory
+      // Use proper getLeaderboardById method
       const targetLeaderboard = await storage.getLeaderboardById(leaderboardId);
       
       if (!targetLeaderboard) {
@@ -802,7 +802,7 @@ export function registerGamificationRoutes(app: Express): void {
         }
       }
 
-      // CRITICAL SECURITY FIX: Check access permissions for class-specific requests
+      // Check access permissions for class-specific requests
       if (scope === 'class') {
         if (!classId) {
           return res.status(400).json({ error: 'classId is required when scope is "class"' });

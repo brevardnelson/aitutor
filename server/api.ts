@@ -338,11 +338,6 @@ export class DashboardAPI {
             action: 'problem_completed',
             metadata: { sessionId, problemsCompleted, correctAnswers },
           });
-          const { onXPEarned } = await import('./gamification-hooks');
-          if (correctAnswers > 0) {
-            const sessionXP = correctAnswers * 10;
-            await onXPEarned(studentId, sessionXP, 'session_completion');
-          }
         }
       }
     } catch (error) {

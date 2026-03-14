@@ -216,7 +216,7 @@ export class DashboardStorage {
       );
     }
     
-    // CRITICAL FIX: Wire up challenge auto-tracking for session completion
+    // Wire up challenge auto-tracking for session completion
     if (sessionInfo && updates.problemsCompleted !== undefined) {
       try {
         const problemsDelta = updates.problemsCompleted - (sessionInfo.problems_completed || 0);
@@ -271,7 +271,7 @@ export class DashboardStorage {
       ) RETURNING id
     `;
     
-    // CRITICAL FIX: Wire up challenge auto-tracking for completed problems
+    // Wire up challenge auto-tracking for completed problems
     if (attempt.isCompleted && attempt.isCorrect) {
       try {
         await this.autoUpdateChallengeProgress(attempt.studentId, {
@@ -292,7 +292,7 @@ export class DashboardStorage {
       }
     }
 
-    // SECURITY FIX: Automatic XP earning for verified problem completions
+    // Automatic XP earning for verified problem completions
     if (attempt.isCompleted && attempt.isCorrect) {
       try {
         // Calculate XP based on verified problem data using the same logic as the routes
@@ -455,7 +455,7 @@ export class DashboardStorage {
         accuracy_rate = EXCLUDED.accuracy_rate
     `;
     
-    // CRITICAL FIX: Wire up challenge auto-tracking for time and streak challenges
+    // Wire up challenge auto-tracking for time and streak challenges
     try {
       // Track time spent if there's an increase
       const timeDelta = (activity.totalTime || 0) - oldData.total_time;
@@ -804,18 +804,16 @@ export class DashboardStorage {
     description: string;
     metadata?: any;
     sessionId?: number;
-    idempotencyKey?: string; // For preventing duplicate awards
+    idempotencyKey?: string;
   }, connection?: any) {
     const sql = connection || this.sql;
     const executeTransaction = async (txnSql: any) => {
-      // Get current XP data
       const currentXP = await sql`
         SELECT * FROM student_xp WHERE student_id = ${studentId}
       `;
 
       let xpData = currentXP[0];
       if (!xpData) {
-        // Initialize if not exists
         await sql`
           INSERT INTO student_xp (student_id, total_xp, spent_xp, available_xp, level, weekly_xp, monthly_xp)
           VALUES (${studentId}, 0, 0, 0, 1, 0, 0)
@@ -828,24 +826,8 @@ export class DashboardStorage {
       const newAvailableXP = xpData.available_xp + transaction.amount;
       const newWeeklyXP = xpData.weekly_xp + transaction.amount;
       const newMonthlyXP = xpData.monthly_xp + transaction.amount;
-
-      // Calculate new level
       const newLevel = this.calculateLevel(newTotalXP);
 
-      // Update XP data
-      await sql`
-        UPDATE student_xp 
-        SET total_xp = ${newTotalXP},
-            available_xp = ${newAvailableXP},
-            level = ${newLevel},
-            weekly_xp = ${newWeeklyXP},
-            monthly_xp = ${newMonthlyXP},
-            last_xp_earned = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE student_id = ${studentId}
-      `;
-
-      // CRITICAL FIX: Create transaction record with idempotency protection
       try {
         await txnSql`
           INSERT INTO xp_transactions (
@@ -858,20 +840,29 @@ export class DashboardStorage {
           )
         `;
       } catch (dbError: any) {
-        // Handle duplicate idempotency key gracefully
         if (dbError.code === '23505' && transaction.idempotencyKey) {
-          console.log(`XP transaction ${transaction.idempotencyKey} already processed for student ${studentId}`);
-          return; // Skip duplicate transaction
+          console.log(`Duplicate XP transaction ${transaction.idempotencyKey} for student ${studentId}, skipping`);
+          return;
         }
         throw dbError;
       }
+
+      await sql`
+        UPDATE student_xp 
+        SET total_xp = ${newTotalXP},
+            available_xp = ${newAvailableXP},
+            level = ${newLevel},
+            weekly_xp = ${newWeeklyXP},
+            monthly_xp = ${newMonthlyXP},
+            last_xp_earned = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE student_id = ${studentId}
+      `;
     };
 
     if (connection) {
-      // Use existing transaction
       await executeTransaction(connection);
     } else {
-      // Create new transaction
       await this.sql.begin(executeTransaction);
     }
 
@@ -1956,7 +1947,7 @@ export class DashboardStorage {
           SELECT COUNT(*) as streak_days
           FROM daily_activity 
           WHERE student_id = ${studentId} 
-          AND activity_date >= CURRENT_DATE - INTERVAL '${criteria.days} days'
+          AND date >= CURRENT_DATE - INTERVAL '${criteria.days} days'
           AND problems_completed > 0
         `;
         return streakData[0]?.streak_days >= criteria.days;
@@ -1999,7 +1990,7 @@ export class DashboardStorage {
           WHERE student_id = ${studentId} 
           AND is_correct = true 
           AND hints_used = 0
-          AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+          AND timestamp >= CURRENT_DATE - INTERVAL '7 days'
         `;
         return perfectScores[0]?.perfect_count >= (criteria.count || 1);
 
@@ -2120,7 +2111,7 @@ export class DashboardStorage {
   async joinChallenge(challengeId: number, studentId: number): Promise<boolean> {
     try {
       return await this.sql.begin(async (sql) => {
-        // CRITICAL FIX: Lock challenge row to prevent race conditions
+        // Lock challenge row to prevent race conditions
         const [challenge] = await sql`
           SELECT * FROM challenges 
           WHERE id = ${challengeId}
@@ -2140,7 +2131,7 @@ export class DashboardStorage {
           return false;
         }
 
-        // CRITICAL FIX: Atomic participant count check with row lock
+        // Atomic participant count check with row lock
         if (challenge.max_participants && challenge.current_participants >= challenge.max_participants) {
           return false;
         }
@@ -2167,7 +2158,7 @@ export class DashboardStorage {
           startingBaseline = Math.round(stats?.avg_accuracy || 0);
         }
 
-        // CRITICAL FIX: Atomic enrollment with proper error handling
+        // Atomic enrollment with proper error handling
         try {
           // Insert participation record
           await sql`
@@ -2251,7 +2242,7 @@ export class DashboardStorage {
         WHERE challenge_id = ${challengeId} AND student_id = ${studentId}
       `;
 
-      // CRITICAL FIX: Award rewards atomically if challenge just completed
+      // Award rewards atomically if challenge just completed
       // Use OR logic to allow separate XP and badge awards
       if (isCompleted && (!participation.xp_awarded || !participation.badge_awarded)) {
         await this.completeChallenge(challengeId, studentId, sql);
@@ -2267,7 +2258,7 @@ export class DashboardStorage {
     if (!challenge) return;
 
     try {
-      // CRITICAL FIX: Atomic reward distribution with proper single-award semantics
+      // Atomic reward distribution with proper single-award semantics
       
       // Award XP if eligible - use idempotent UPDATE...WHERE pattern
       if (challenge.xp_reward > 0) {
@@ -2474,7 +2465,7 @@ export class DashboardStorage {
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
 
-    // CRITICAL FIX: Use advisory lock to prevent race conditions in challenge creation
+    // Use advisory lock to prevent race conditions in challenge creation
     const weekKey = startOfWeek.getTime(); // Unique identifier for this week
     const lockId = weekKey % 2147483647; // Convert to PostgreSQL bigint range
     
