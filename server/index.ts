@@ -172,7 +172,6 @@ app.post('/api/sessions/:sessionId/problem-attempt',
         return res.status(401).json({ error: 'Authentication required' });
       }
       
-      // CRITICAL: Verify user can access this session AND student
       const hasSessionAccess = await verifySessionAccess(req.user, sessionIdNum);
       const hasStudentAccess = await verifyStudentAccess(req.user, studentId);
       if (!hasSessionAccess || !hasStudentAccess) {
@@ -181,6 +180,13 @@ app.post('/api/sessions/:sessionId/problem-attempt',
           sessionId: sessionIdNum,
           studentId
         });
+      }
+
+      const sessionRow = await storage.sql`
+        SELECT student_id FROM learning_sessions WHERE id = ${sessionIdNum} LIMIT 1
+      `;
+      if (sessionRow[0] && sessionRow[0].student_id !== studentId) {
+        return res.status(400).json({ error: 'Student ID does not match session owner' });
       }
       
       await dashboardAPI.recordProblemAttempt(

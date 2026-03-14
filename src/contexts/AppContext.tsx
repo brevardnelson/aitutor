@@ -99,6 +99,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const selectChild = (child: Child) => {
     setCurrentChild(child);
+    localStorage.setItem('caribbean_ai_current_child', JSON.stringify(child));
   };
 
   const setSubject = (subject: string) => {
