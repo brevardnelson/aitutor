@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import OurStory from "./pages/OurStory";
 import ContactUs from "./pages/ContactUs";
+import About from "./pages/About";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { TeacherDashboard } from "./components/teacher/TeacherDashboard";
 
@@ -28,6 +29,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/our-story" element={<OurStory />} />
+                <Route path="/about" element={<About />} />
                 <Route path="/contact-us" element={<ContactUs />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/teacher" element={<TeacherDashboard />} />
