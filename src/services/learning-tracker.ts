@@ -25,14 +25,18 @@ export class LearningTracker {
   private sessionStartTime: number = 0;
   private problemStartTime: number = 0;
 
-  // Start a new learning session
+  private getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('caribbeanAI_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  }
+
   async startSession(data: LearningSessionData): Promise<number> {
     try {
       const response = await fetch('/api/sessions/start', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify(data),
       });
@@ -73,9 +77,7 @@ export class LearningTracker {
 
       const response = await fetch(`/api/sessions/${this.currentSessionId}/end`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({
           duration,
@@ -106,9 +108,7 @@ export class LearningTracker {
     try {
       const response = await fetch(`/api/sessions/${this.currentSessionId}/abandon`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({ reason }),
       });
@@ -142,9 +142,7 @@ export class LearningTracker {
     try {
       const response = await fetch(`/api/sessions/${this.currentSessionId}/problem-attempt`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({
           studentId,

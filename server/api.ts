@@ -333,14 +333,16 @@ export class DashboardAPI {
           accuracyRate: accuracy,
           topicsWorked: session[0].topic ? [session[0].topic] : [],
         });
-        await storage.checkAndAwardBadges(studentId, {
-          action: 'problem_completed',
-          metadata: { sessionId, problemsCompleted, correctAnswers },
-        });
-        const { onXPEarned } = await import('./gamification-hooks');
-        if (correctAnswers > 0) {
-          const sessionXP = correctAnswers * 10;
-          await onXPEarned(studentId, sessionXP, 'session_completion');
+        if (problemsCompleted > 0) {
+          await storage.checkAndAwardBadges(studentId, {
+            action: 'problem_completed',
+            metadata: { sessionId, problemsCompleted, correctAnswers },
+          });
+          const { onXPEarned } = await import('./gamification-hooks');
+          if (correctAnswers > 0) {
+            const sessionXP = correctAnswers * 10;
+            await onXPEarned(studentId, sessionXP, 'session_completion');
+          }
         }
       }
     } catch (error) {

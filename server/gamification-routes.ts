@@ -380,13 +380,35 @@ export function registerGamificationRoutes(app: Express): void {
       const xpData = await storage.getStudentXP(studentId);
       
       if (!xpData) {
-        // Initialize XP tracking for new student
         await storage.initializeStudentXP(studentId);
         const newXpData = await storage.getStudentXP(studentId);
-        return res.json(newXpData);
+        return res.json({ ...newXpData, currentStreak: 0 });
       }
 
-      res.json(xpData);
+      const streakRows = await storage.sql`
+        SELECT date FROM daily_activity
+        WHERE student_id = ${studentId} AND problems_completed > 0
+        ORDER BY date DESC LIMIT 60
+      `;
+      let currentStreak = 0;
+      if (streakRows.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dates = streakRows.map((r: { date: string }) => {
+          const d = new Date(r.date);
+          d.setHours(0, 0, 0, 0);
+          return d.getTime();
+        });
+        const dayMs = 86400000;
+        const todayMs = today.getTime();
+        let checkDate = dates.includes(todayMs) ? todayMs : todayMs - dayMs;
+        while (dates.includes(checkDate)) {
+          currentStreak++;
+          checkDate -= dayMs;
+        }
+      }
+
+      res.json({ ...xpData, currentStreak });
     } catch (error) {
       console.error('Error fetching student XP:', error);
       res.status(500).json({ error: 'Failed to fetch XP data' });
