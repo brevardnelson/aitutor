@@ -468,8 +468,8 @@ export function registerGamificationRoutes(app: Express): void {
           });
         }
         
-        const challengeRecord = await storage.getChallengeById?.(metadata.challengeId);
-        actualXP = challengeRecord?.xpReward || 50;
+        const challengeRecord = await storage.getChallenge(metadata.challengeId);
+        actualXP = challengeRecord?.xp_reward || 50;
         description = 'Admin award: Challenge completed!';
         
       } else {

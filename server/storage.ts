@@ -461,15 +461,14 @@ export class DashboardStorage {
     
     // Wire up challenge auto-tracking for time and streak challenges
     try {
-      // Track time spent if there's an increase
-      const timeDelta = (activity.totalTime || 0) - oldData.total_time;
-      if (timeDelta > 0) {
+      const sessionTime = activity.totalTime || 0;
+      if (sessionTime > 0) {
         await this.autoUpdateChallengeProgress(studentId, {
           type: 'time_spent',
-          value: timeDelta, // In minutes
+          value: sessionTime,
           metadata: {
             date,
-            totalTimeToday: activity.totalTime || 0,
+            sessionTime,
             sessionsCount: activity.sessionsCount || 0
           }
         });
