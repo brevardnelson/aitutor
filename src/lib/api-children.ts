@@ -134,6 +134,15 @@ class ChildrenAPIService {
       throw error;
     }
   }
+
+  async getDashboardKPIs(): Promise<{ sessionsThisWeek: number; avgAccuracy: number }> {
+    try {
+      return await this.fetchWithAuth(`${this.API_URL}/dashboard-kpis`);
+    } catch (error) {
+      console.error('Get dashboard KPIs error:', error);
+      return { sessionsThisWeek: 0, avgAccuracy: 0 };
+    }
+  }
 }
 
 export const childrenAPI = new ChildrenAPIService();

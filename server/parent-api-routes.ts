@@ -8,7 +8,7 @@ import { ParentBadgeService } from './parent-badge-service';
 import { RedemptionRecommendationService } from './redemption-recommendation-service';
 import { db } from './storage';
 import * as schema from '../shared/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, gte } from 'drizzle-orm';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -714,6 +714,54 @@ router.get('/engagement', authenticateToken, requireParentOrAbove, async (req, r
   } catch (error) {
     console.error('Get parent engagement error:', error);
     res.status(500).json({ error: 'Failed to fetch engagement data' });
+  }
+});
+
+router.get('/dashboard-kpis', authenticateToken, requireParentOrAbove, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User ID not found' });
+    }
+
+    const childRows = await db.select({ id: schema.students.id })
+      .from(schema.students)
+      .where(eq(schema.students.parentId, userId));
+
+    const childIds = childRows.map(c => c.id);
+
+    if (childIds.length === 0) {
+      return res.json({ sessionsThisWeek: 0, avgAccuracy: 0 });
+    }
+
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const sessionStats = await db.select({
+      totalSessions: sql<number>`count(*)::int`,
+      totalCorrect: sql<number>`coalesce(sum(${schema.learningSessions.correctAnswers}), 0)::int`,
+      totalAttempted: sql<number>`coalesce(sum(${schema.learningSessions.problemsAttempted}), 0)::int`,
+    })
+    .from(schema.learningSessions)
+    .where(
+      and(
+        sql`${schema.learningSessions.studentId} IN (${sql.join(childIds.map(id => sql`${id}`), sql`, `)})`,
+        gte(schema.learningSessions.startTime, oneWeekAgo)
+      )
+    );
+
+    const stats = sessionStats[0] || { totalSessions: 0, totalCorrect: 0, totalAttempted: 0 };
+    const avgAccuracy = stats.totalAttempted > 0
+      ? Math.round((stats.totalCorrect / stats.totalAttempted) * 100)
+      : 0;
+
+    res.json({
+      sessionsThisWeek: stats.totalSessions,
+      avgAccuracy,
+    });
+  } catch (error) {
+    console.error('Get dashboard KPIs error:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard KPIs' });
   }
 });
 

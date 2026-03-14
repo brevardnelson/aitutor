@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppContext } from '@/contexts/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import DetailedDashboard from './DetailedDashboard';
 import ParentNotifications from '../parent/ParentNotifications';
 import ParentBadges from '../parent/ParentBadges';
 import RedemptionRecommendations from '../parent/RedemptionRecommendations';
+import { childrenAPI } from '@/lib/api-children';
 
 interface DashboardProps {
   onStartLearning: () => void;
@@ -19,10 +20,28 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
   const { user } = useAuth();
   const { children, selectedSubject, isLoadingChildren } = useAppContext();
-  const [showAddChild, setShowAddChild] = React.useState(false);
-  const [showDetailedDashboard, setShowDetailedDashboard] = React.useState(false);
-  const [selectedChildForAnalytics, setSelectedChildForAnalytics] = React.useState<{id: number, name: string} | null>(null);
-  const [activeTab, setActiveTab] = React.useState<'children' | 'gamification'>('children');
+  const [showAddChild, setShowAddChild] = useState(false);
+  const [showDetailedDashboard, setShowDetailedDashboard] = useState(false);
+  const [selectedChildForAnalytics, setSelectedChildForAnalytics] = useState<{id: number, name: string} | null>(null);
+  const [activeTab, setActiveTab] = useState<'children' | 'gamification'>('children');
+  const [kpis, setKpis] = useState<{ sessionsThisWeek: number; avgAccuracy: number }>({ sessionsThisWeek: 0, avgAccuracy: 0 });
+  const [kpisLoading, setKpisLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchKpis = async () => {
+      try {
+        const data = await childrenAPI.getDashboardKPIs();
+        if (!cancelled) setKpis(data);
+      } catch (e) {
+        console.error('Failed to load KPIs:', e);
+      } finally {
+        if (!cancelled) setKpisLoading(false);
+      }
+    };
+    fetchKpis();
+    return () => { cancelled = true; };
+  }, [children.length]);
   
   // Get subject-specific children
   const currentSubject = selectedSubject || 'math';
@@ -100,8 +119,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-purple-100">Active Sessions</p>
-                  <p className="text-3xl font-bold">12</p>
+                  <p className="text-purple-100">Sessions This Week</p>
+                  <p className="text-3xl font-bold">{kpisLoading ? '...' : kpis.sessionsThisWeek}</p>
                 </div>
                 <BookOpen className="h-8 w-8 text-purple-200" />
               </div>
@@ -112,8 +131,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartLearning }) => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-green-100">Avg Progress</p>
-                  <p className="text-3xl font-bold">78%</p>
+                  <p className="text-green-100">Avg Accuracy</p>
+                  <p className="text-3xl font-bold">{kpisLoading ? '...' : `${kpis.avgAccuracy}%`}</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-green-200" />
               </div>
