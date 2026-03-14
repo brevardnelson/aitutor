@@ -20,7 +20,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const { toast } = useToast();
   const { signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [showAuthForm, setShowAuthForm] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('signup') === 'true';
+  });
   const [signInData, setSignInData] = useState({
     email: '',
     password: ''
