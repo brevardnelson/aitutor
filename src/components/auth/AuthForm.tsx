@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GraduationCap, Users, BookOpen, Brain, Trophy, TrendingUp, Clock, Target, CheckCircle, ArrowRight, Sparkles, Award, MessageSquare } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { UserRole } from '@/lib/auth';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -19,15 +20,21 @@ interface AuthFormProps {
 const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const { toast } = useToast();
   const { signIn, signUp } = useAuth();
+  const location = useLocation();
   const [isLoading, setIsLoading] = useState(false);
-  const [showAuthForm, setShowAuthForm] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('signup') === 'true' || params.get('login') === 'true';
-  });
-  const [defaultTab] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('login') === 'true' ? 'signin' : 'signup';
-  });
+  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('signup');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('login') === 'true') {
+      setShowAuthForm(true);
+      setActiveTab('signin');
+    } else if (params.get('signup') === 'true') {
+      setShowAuthForm(true);
+      setActiveTab('signup');
+    }
+  }, [location.search]);
   const [signInData, setSignInData] = useState({
     email: '',
     password: ''
@@ -148,7 +155,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
               <CardDescription>Sign in to your account or create a new one</CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue={defaultTab} className="w-full">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="signin" data-testid="tab-signin">Sign In</TabsTrigger>
                   <TabsTrigger value="signup" data-testid="tab-signup">Sign Up</TabsTrigger>
