@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, Mail, Phone, MapPin, CheckCircle } from 'lucide-react';
+import { Mail, MapPin, CheckCircle } from 'lucide-react';
+import PublicHeader from '@/components/PublicHeader';
 import Footer from '@/components/Footer';
 
 const ContactUs = () => {
@@ -25,24 +25,7 @@ const ContactUs = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <BookOpen className="h-6 w-6 text-blue-600" />
-              <span className="text-lg font-semibold text-gray-900">Caribbean AI Tutor</span>
-            </Link>
-            <div className="flex items-center space-x-3">
-              <Link to="/">
-                <Button variant="ghost" size="sm">Log In</Button>
-              </Link>
-              <Link to="/?signup=true">
-                <Button size="sm">Sign Up</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <main className="flex-1">
         <section className="bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white py-16">
