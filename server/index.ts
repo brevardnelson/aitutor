@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Anthropic from '@anthropic-ai/sdk';
 import { dashboardAPI } from './api';
 import authRoutes from './auth-routes';
 import adminRoutes from './admin-routes';
@@ -15,6 +16,10 @@ import { validateParamIds, validateBodyIds, getValidatedId } from './id-validati
 import { storage } from './storage';
 import { seedDemoDataIfEmpty } from './seed-demo-data';
 
+const anthropicClient = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -26,7 +31,7 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // Authentication routes
 app.use('/api/auth', authRoutes);
@@ -277,6 +282,70 @@ app.get('/api/curriculum/:gradeLevel/:subject',
       });
     }
   });
+
+// Handwriting OCR endpoint
+app.post('/api/ocr/handwriting',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const { imageBase64 } = req.body;
+      if (!imageBase64 || typeof imageBase64 !== 'string') {
+        return res.status(400).json({ error: 'imageBase64 is required' });
+      }
+
+      if (imageBase64.length > 4 * 1024 * 1024) {
+        return res.status(400).json({ error: 'Image too large (max 4MB encoded)' });
+      }
+
+      if (!anthropicClient) {
+        return res.status(503).json({ error: 'OCR service is not configured' });
+      }
+
+      const message = await anthropicClient.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 256,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: imageBase64,
+                },
+              },
+              {
+                type: 'text',
+                text: 'This image contains a student\'s handwritten math answer. Transcribe ONLY what is written as plain text. Use ASCII math notation: fractions as a/b, multiplication as *, exponents as ^, square root as sqrt(). Output ONLY the transcribed answer with no explanation or commentary. If you cannot read the writing, reply with just: UNREADABLE',
+              },
+            ],
+          },
+        ],
+      });
+
+      const block = message.content[0];
+      const text = block.type === 'text' ? block.text.trim() : '';
+
+      if (text === 'UNREADABLE') {
+        return res.status(422).json({ text: '', error: 'Could not read handwriting. Try writing more clearly.' });
+      }
+
+      res.json({ text });
+    } catch (error: any) {
+      console.error('OCR endpoint error:', error);
+      res.status(500).json({
+        error: 'Handwriting recognition failed',
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      });
+    }
+  }
+);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

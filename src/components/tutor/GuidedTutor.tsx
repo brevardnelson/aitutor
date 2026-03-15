@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bot, User, Lightbulb, CheckCircle, XCircle, AlertCircle, RefreshCw, Cpu } from 'lucide-react';
+import { Bot, User, Lightbulb, CheckCircle, XCircle, AlertCircle, RefreshCw, Cpu, PenTool, Keyboard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StepValidator, StepValidationResult } from '@/lib/stepValidator';
 import { guidedTutorContent, TopicKey, getRandomQuestion } from './GuidedTutorContent';
 import { aiService, type Subject, type TutoringRequest } from '@/lib/ai-service';
 import { learningTracker, LearningTracker } from '@/services/learning-tracker';
 import { useAppContext } from '@/contexts/AppContext';
+import HandwritingCanvas from './HandwritingCanvas';
 
 interface Message {
   id: string;
@@ -52,6 +53,8 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   const [sessionStarted, setSessionStarted] = useState(false);
   const [hintsUsed, setHintsUsed] = useState(0);
   const [attempts, setAttempts] = useState(0);
+  const [useHandwriting, setUseHandwriting] = useState(false);
+  const [recognisedText, setRecognisedText] = useState('');
   
   // Session-wide aggregate counters for proper endSession tracking
   const [problemsAttempted, setProblemsAttempted] = useState(0);
@@ -245,22 +248,24 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     return hints[idx];
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, textOverride?: string) => {
     e.preventDefault();
-    if (!userInput?.trim() || isValidating || isGeneratingResponse) return;
+    const text = textOverride ?? userInput;
+    if (!text?.trim() || isValidating || isGeneratingResponse) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
-      content: userInput,
+      content: text,
       timestamp: new Date()
     };
     
     setMessages(prev => [...prev, userMessage]);
     setUserInput('');
+    setRecognisedText('');
     
     // Handle hint requests - don't count as problem attempts
-    if (userInput.toLowerCase().trim() === 'hint') {
+    if (text.toLowerCase().trim() === 'hint') {
       setHintsUsed(prev => prev + 1);
       setTotalHintsUsed(prev => prev + 1);
       const hintMessage: Message = {
@@ -278,7 +283,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     setProblemsAttempted(prev => prev + 1);
     
     // Check if this is the final correct answer
-    if (checkAnswer(userInput)) {
+    if (checkAnswer(text)) {
       // Update aggregate counters
       setCorrectAnswers(prev => prev + 1);
       setProblemsCompleted(prev => prev + 1);
@@ -349,7 +354,7 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     
     try {
       const validation = await StepValidator.validateStepWithAI(
-        userInput, 
+        text, 
         currentQuestion.steps?.[currentStep] || 'Continue with the next step', 
         `Step ${currentStep + 1}`,
         topic || 'math'
@@ -516,17 +521,64 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
             <Lightbulb className="h-4 w-4 mr-2" />Get Hint
           </Button>
           
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Input
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              placeholder={isComplete ? "Completed! Try new question" : "Your answer..."}
-              disabled={isComplete || isValidating}
-            />
-            <Button type="submit" disabled={isComplete || isValidating || !userInput?.trim()}>
-              {isValidating ? 'Checking...' : 'Send'}
-            </Button>
-          </form>
+          {useHandwriting ? (
+            <div className="space-y-2">
+              <HandwritingCanvas
+                onRecognised={(text) => {
+                  setRecognisedText(text);
+                }}
+                disabled={isComplete || isValidating}
+              />
+              {recognisedText && (
+                <form onSubmit={(e) => {
+                  handleSubmit(e, recognisedText);
+                }} className="flex gap-2">
+                  <Input
+                    value={recognisedText}
+                    onChange={(e) => setRecognisedText(e.target.value)}
+                    placeholder="Recognised text — edit if needed"
+                    disabled={isComplete || isValidating}
+                  />
+                  <Button type="submit" disabled={isComplete || isValidating || !recognisedText.trim()}>
+                    {isValidating ? 'Checking...' : 'Submit'}
+                  </Button>
+                </form>
+              )}
+              <button
+                type="button"
+                onClick={() => { setUseHandwriting(false); setRecognisedText(''); }}
+                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                <Keyboard className="h-3 w-3" />
+                Switch to keyboard
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <form onSubmit={handleSubmit} className="flex gap-2 flex-1">
+                <Input
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  placeholder={isComplete ? "Completed! Try new question" : "Your answer..."}
+                  disabled={isComplete || isValidating}
+                />
+                <Button type="submit" disabled={isComplete || isValidating || !userInput?.trim()}>
+                  {isValidating ? 'Checking...' : 'Send'}
+                </Button>
+              </form>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setUseHandwriting(true)}
+                disabled={isComplete || isValidating}
+                title="Switch to handwriting input"
+                className="shrink-0"
+              >
+                <PenTool className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

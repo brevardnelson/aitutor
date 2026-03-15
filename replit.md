@@ -4,7 +4,28 @@
 
 A comprehensive web-based AI tutoring platform supporting both US (K-13) and Caribbean (Infant 1-2, Standard 1-5, Form 1-6) grade systems. The application features multi-institutional hierarchy, parent engagement systems with email notifications, achievement badges, intelligent reward recommendations, and fully integrated parent dashboards alongside student gamification infrastructure.
 
-## Recent Updates (October 2025)
+## Recent Updates (March 2026)
+
+### Handwriting Input for Guided Practice ✅
+- Added HandwritingCanvas component with HTML5 Canvas + PointerEvents (stylus/mouse/touch)
+- Stroke-based drawing with pressure sensitivity, Undo, and Clear functionality
+- OCR via Anthropic Claude Vision API (POST /api/ocr/handwriting) transcribes handwriting to text
+- Toggle button (pen icon) in GuidedTutor switches between keyboard and handwriting modes
+- Recognised text shown in editable preview field before submission
+- Works on tablets with stylus, desktop with mouse, and mobile with finger
+
+### Google Analytics 4 ✅
+- GA4 tracking (G-CZRNY5GPC5) added to index.html with SPA page-view tracking
+- PageTracker component fires page_view events on every React Router navigation
+
+### Navigation & Branding Updates ✅
+- Public nav bar now includes Our Story, About AI Tutor, Contact Us links
+- Header is sticky with backdrop blur across all pages
+- Mobile hamburger menu for responsive navigation
+- Rebranded from "Nelsonian Solutions" to "Nelsonian Foundation" (non-profit)
+- Footer: "Made available through support from the Nelsonian Foundation"
+
+## Previous Updates (October 2025)
 
 ### PostgreSQL Migration Complete ✅
 - Migrated all data storage from localStorage to PostgreSQL database
