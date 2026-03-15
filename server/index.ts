@@ -337,11 +337,12 @@ app.post('/api/ocr/handwriting',
       }
 
       res.json({ text });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('OCR endpoint error:', error);
+      const devMsg = error instanceof Error ? error.message : 'Internal server error';
       res.status(500).json({
         error: 'Handwriting recognition failed',
-        message: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? devMsg : 'Internal server error',
       });
     }
   }

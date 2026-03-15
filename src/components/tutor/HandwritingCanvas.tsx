@@ -119,7 +119,20 @@ const HandwritingCanvas = ({ onRecognised, disabled }: HandwritingCanvasProps) =
     if (!isDrawing.current || !currentStroke.current) return;
     e.preventDefault();
     isDrawing.current = false;
-    if (currentStroke.current.points.length > 1) {
+    if (currentStroke.current.points.length >= 1) {
+      if (currentStroke.current.points.length === 1) {
+        const pt = currentStroke.current.points[0];
+        currentStroke.current.points.push({ ...pt, x: pt.x + 0.5, y: pt.y + 0.5 });
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) {
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineCap = 'round';
+          ctx.lineWidth = Math.max(1.5, pt.pressure * 4);
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
       setStrokes(prev => {
         const next = [...prev, currentStroke.current!];
         setHasContent(true);
@@ -183,10 +196,11 @@ const HandwritingCanvas = ({ onRecognised, disabled }: HandwritingCanvasProps) =
       } else {
         throw new Error('Could not recognise any text. Try writing more clearly.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Handwriting recognition error:', err);
       onRecognised('');
-      alert(err.message || 'Could not recognise handwriting. Please try again or type your answer.');
+      const message = err instanceof Error ? err.message : 'Could not recognise handwriting. Please try again or type your answer.';
+      alert(message);
     } finally {
       setIsRecognising(false);
     }
