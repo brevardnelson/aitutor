@@ -31,9 +31,14 @@ const OurStory = () => {
               <p className="text-gray-600 leading-relaxed mb-8">
                 Caribbean AI Tutor was born from a deeply personal observation: across the Caribbean, countless bright and eager students struggle not because they lack ability, but because they lack access. Access to qualified tutors, affordable learning materials, and consistent educational support. In many communities, private tutoring is a privilege reserved for those who can afford it, leaving behind the very students who need it most.
               </p>
-              <p className="text-gray-600 leading-relaxed mb-8">
-                At Nelsonian Solutions, we saw an opportunity to change this. We asked ourselves: what if every child in the Caribbean — whether in bustling Port of Spain, rural Jamaica, or the smaller islands of the Eastern Caribbean — could have a patient, knowledgeable tutor available 24 hours a day, 7 days a week? A tutor that never gets tired, never loses patience, and adapts to each student's unique learning pace?
+              <p className="text-gray-600 leading-relaxed mb-6">
+                At the Nelsonian Foundation, we saw an opportunity to change this. We asked ourselves: what if every child in the Caribbean — whether in bustling Port of Spain, rural Jamaica, or the smaller islands of the Eastern Caribbean — could have a patient, knowledgeable tutor available 24 hours a day, 7 days a week? A tutor that never gets tired, never loses patience, and adapts to each student's unique learning pace?
               </p>
+              <div className="bg-blue-50 border-l-4 border-blue-500 rounded-r-lg p-5 mb-8">
+                <p className="text-gray-700 leading-relaxed text-sm">
+                  <span className="font-semibold text-blue-800">About the Nelsonian Foundation —</span> The Nelsonian Foundation is a non-profit organisation focused on leveraging technology to help underprivileged, at-risk, and vulnerable citizens unlock their full potential and participate meaningfully in society. Caribbean AI Tutor is one of its flagship initiatives, placing the power of personalised education within reach of every student who needs it most.
+                </p>
+              </div>
 
               <div id="approach" className="flex items-center gap-3 mb-6">
                 <div className="bg-green-100 p-3 rounded-full">
@@ -89,7 +94,7 @@ const OurStory = () => {
               <p className="text-gray-500 mb-4 italic">
                 "Every child deserves a chance to shine. We're here to light the way."
               </p>
-              <p className="text-sm font-semibold text-gray-700">— The Nelsonian Solutions Team</p>
+              <p className="text-sm font-semibold text-gray-700">— The Nelsonian Foundation Team</p>
               <div className="mt-8">
                 <Link to="/?signup=true">
                   <Button size="lg" className="bg-blue-600 hover:bg-blue-700">

@@ -60,7 +60,7 @@ const Footer = () => {
 
         <div className="border-t border-gray-800 mt-8 pt-8 text-center">
           <p className="text-sm text-gray-500">
-            &copy; {currentYear} Developed by Nelsonian Solutions Limited
+            &copy; {currentYear} Made available through support from the Nelsonian Foundation
           </p>
         </div>
       </div>
