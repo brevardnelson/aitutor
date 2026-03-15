@@ -162,7 +162,7 @@ const HandwritingCanvas = ({ onRecognised, disabled }: HandwritingCanvasProps) =
       const dataUrl = tempCanvas.toDataURL('image/png');
       const imageBase64 = dataUrl.split(',')[1];
 
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('caribbeanAI_token');
       const res = await fetch('/api/ocr/handwriting', {
         method: 'POST',
         headers: {
