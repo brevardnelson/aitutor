@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { LogOut, BookOpen } from 'lucide-react';
 import Footer from '@/components/Footer';
+import PublicHeader from '@/components/PublicHeader';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -26,24 +27,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
   if (!user) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                <BookOpen className="h-6 w-6 text-blue-600" />
-                <span className="text-lg font-semibold text-gray-900">Caribbean AI Tutor</span>
-              </Link>
-              <div className="flex items-center space-x-3">
-                <Link to="/?login=true">
-                  <Button variant="ghost" size="sm">Log In</Button>
-                </Link>
-                <Link to="/?signup=true">
-                  <Button size="sm">Sign Up</Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
+        <PublicHeader />
         <main className="flex-1">
           {children}
         </main>
@@ -54,7 +38,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-white shadow-sm border-b">
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -62,7 +46,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
               <span className="text-lg font-semibold text-gray-900">Caribbean AI Tutor</span>
             </Link>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-gray-700 hidden sm:inline">
                 {user.fullName} ({user.primaryRole})
               </span>
               <Button
