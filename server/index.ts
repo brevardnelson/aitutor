@@ -16,9 +16,10 @@ import { validateParamIds, validateBodyIds, getValidatedId } from './id-validati
 import { storage } from './storage';
 import { seedDemoDataIfEmpty } from './seed-demo-data';
 
-const anthropicClient = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  : null;
+const anthropicClient = new Anthropic({
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '',
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -301,12 +302,8 @@ app.post('/api/ocr/handwriting',
         return res.status(400).json({ error: 'Image too large (max 4MB encoded)' });
       }
 
-      if (!anthropicClient) {
-        return res.status(503).json({ error: 'OCR service is not configured' });
-      }
-
       const message = await anthropicClient.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 256,
         messages: [
           {

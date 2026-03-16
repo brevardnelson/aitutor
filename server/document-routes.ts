@@ -174,9 +174,10 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 }) : null;
 
-const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-}) : null;
+const anthropic = new Anthropic({
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '',
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
+});
 
 export function registerDocumentRoutes(app: Express) {
   const objectStorage = new ObjectStorageService();
