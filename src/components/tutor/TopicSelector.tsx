@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calculator, Percent, Divide, Plus, Minus, X, Hash, Square, RotateCcw, Triangle, Ruler, Grid3X3, Box, Clock, Compass, Move, Maximize2, Beaker, Timer, BookOpen, PenTool, MessageSquare, FileText, Headphones, Eye, Edit3, Users, Globe, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Calculator, Percent, Divide, Plus, Hash, Square, RotateCcw, Triangle, Ruler, Grid3X3, Box, Clock, Compass, Move, Beaker, Timer, BookOpen, PenTool, MessageSquare, FileText, Headphones, Eye, Edit3, Users, Globe, Sparkles, TrendingUp, ShoppingCart, CircleDot, BarChart3, Network, Star, Sliders, ArrowLeftRight, Layers, GitFork, Infinity, Activity, FlipHorizontal, Workflow } from 'lucide-react';
 
 interface TopicSelectorProps {
   onTopicSelect: (topic: string) => void;
@@ -273,6 +274,156 @@ const scienceTopics = [
   }
 ];
 
+const csecMathTopics = [
+  // Module 1
+  {
+    id: 'CSEC: Number Theory',
+    name: 'Number Theory',
+    description: 'Scientific notation, HCF/LCM, ratio, sequences, real numbers',
+    icon: Hash,
+    difficulty: 'Form 4',
+    color: 'from-blue-600 to-blue-700',
+    module: 'Module 1'
+  },
+  {
+    id: 'CSEC: Consumer Arithmetic',
+    name: 'Consumer Arithmetic',
+    description: 'Profit/loss, simple & compound interest, hire purchase, tax',
+    icon: ShoppingCart,
+    difficulty: 'Form 4',
+    color: 'from-green-600 to-green-700',
+    module: 'Module 1'
+  },
+  {
+    id: 'CSEC: Sets',
+    name: 'Sets',
+    description: 'Venn diagrams, intersection, union, complement, set notation',
+    icon: CircleDot,
+    difficulty: 'Form 4',
+    color: 'from-purple-600 to-purple-700',
+    module: 'Module 1'
+  },
+  {
+    id: 'CSEC: Measurement',
+    name: 'Measurement',
+    description: 'Surface area, volume, sectors, speed-distance-time, scale',
+    icon: Ruler,
+    difficulty: 'Form 4',
+    color: 'from-orange-600 to-orange-700',
+    module: 'Module 1'
+  },
+  {
+    id: 'CSEC: Algebra 1',
+    name: 'Algebra 1',
+    description: 'Indices, expansion, factorisation, inequalities, formulae',
+    icon: Calculator,
+    difficulty: 'Form 4',
+    color: 'from-red-600 to-red-700',
+    module: 'Module 1'
+  },
+  {
+    id: 'CSEC: Introduction to Graphs',
+    name: 'Linear Graphs',
+    description: 'Gradient, intercepts, equation of a line, parallel & perpendicular',
+    icon: TrendingUp,
+    difficulty: 'Form 4',
+    color: 'from-teal-600 to-teal-700',
+    module: 'Module 1'
+  },
+  // Module 2
+  {
+    id: 'CSEC: Statistics 1',
+    name: 'Statistics 1',
+    description: 'Mean, median, mode, range, IQR, bar charts, probability',
+    icon: BarChart3,
+    difficulty: 'Form 4',
+    color: 'from-cyan-600 to-cyan-700',
+    module: 'Module 2'
+  },
+  {
+    id: 'CSEC: Algebra 2',
+    name: 'Algebra 2',
+    description: 'Quadratics, simultaneous equations, completing the square, variation',
+    icon: Activity,
+    difficulty: 'Form 5',
+    color: 'from-indigo-600 to-indigo-700',
+    module: 'Module 2'
+  },
+  {
+    id: 'CSEC: Functions and Graphs',
+    name: 'Functions & Graphs',
+    description: 'Functions, inverse, composite, quadratic graphs, axes of symmetry',
+    icon: GitFork,
+    difficulty: 'Form 5',
+    color: 'from-violet-600 to-violet-700',
+    module: 'Module 2'
+  },
+  {
+    id: 'CSEC: Geometry and Trigonometry',
+    name: 'Geometry & Trigonometry',
+    description: 'Pythagoras, SOHCAHTOA, sine/cosine rule, angles of elevation',
+    icon: Triangle,
+    difficulty: 'Form 5',
+    color: 'from-amber-600 to-amber-700',
+    module: 'Module 2'
+  },
+  {
+    id: 'CSEC: Vectors and Matrices',
+    name: 'Vectors & Matrices',
+    description: 'Vector algebra, magnitude, matrix operations, vector geometry',
+    icon: Network,
+    difficulty: 'Form 5',
+    color: 'from-rose-600 to-rose-700',
+    module: 'Module 2'
+  },
+  // Module 3
+  {
+    id: 'CSEC: Statistics 2',
+    name: 'Statistics 2',
+    description: 'Grouped data, histograms, ogive, combined probability',
+    icon: Sliders,
+    difficulty: 'Form 5',
+    color: 'from-sky-600 to-sky-700',
+    module: 'Module 3'
+  },
+  {
+    id: 'CSEC: Linear Programming',
+    name: 'Linear Programming',
+    description: 'Feasible regions, constraints, maximise/minimise objective functions',
+    icon: Layers,
+    difficulty: 'Form 5',
+    color: 'from-emerald-600 to-emerald-700',
+    module: 'Module 3'
+  },
+  {
+    id: 'CSEC: Circle Theorems',
+    name: 'Circle Theorems',
+    description: 'Angles in circles, cyclic quadrilaterals, tangent properties',
+    icon: Star,
+    difficulty: 'Form 5',
+    color: 'from-pink-600 to-pink-700',
+    module: 'Module 3'
+  },
+  {
+    id: 'CSEC: Transformations',
+    name: 'Transformations',
+    description: 'Reflection, rotation, translation, enlargement in the plane',
+    icon: ArrowLeftRight,
+    difficulty: 'Form 5',
+    color: 'from-lime-600 to-lime-700',
+    module: 'Module 3'
+  },
+  {
+    id: 'CSEC: Matrices 2',
+    name: 'Matrices & Transformations',
+    description: 'Determinants, inverse matrices, transformation matrices',
+    icon: Grid3X3,
+    difficulty: 'Form 5',
+    color: 'from-fuchsia-600 to-fuchsia-700',
+    module: 'Module 3'
+  }
+];
+
 const getTopicsForSubject = (subject: string) => {
   switch (subject.toLowerCase()) {
     case 'english':
@@ -285,64 +436,114 @@ const getTopicsForSubject = (subject: string) => {
   }
 };
 
+const CSEC_MODULE_LABELS: Record<string, string> = {
+  'Module 1': 'Module 1 — Fundamentals',
+  'Module 2': 'Module 2 — Intermediate',
+  'Module 3': 'Module 3 — Higher Concepts',
+};
+
 const TopicSelector: React.FC<TopicSelectorProps> = ({ onTopicSelect, subject = 'math' }) => {
-  const topics = getTopicsForSubject(subject);
+  const [mode, setMode] = useState<'general' | 'csec'>('general');
+  const generalTopics = getTopicsForSubject(subject);
+  const isMath = subject.toLowerCase() === 'math';
+
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'Beginner': return 'bg-green-100 text-green-800';
       case 'Intermediate': return 'bg-yellow-100 text-yellow-800';
       case 'Advanced': return 'bg-red-100 text-red-800';
+      case 'Form 4': return 'bg-blue-100 text-blue-800';
+      case 'Form 5': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
+  const renderTopicCard = (topic: { id: string; name: string; description: string; icon: React.ElementType; difficulty: string; color: string }) => {
+    const IconComponent = topic.icon;
+    return (
+      <Card
+        key={topic.id}
+        className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group"
+        onClick={() => onTopicSelect(topic.id)}
+      >
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className={`bg-gradient-to-r ${topic.color} p-3 rounded-full group-hover:scale-110 transition-transform duration-300`}>
+              <IconComponent className="h-6 w-6 text-white" />
+            </div>
+            <Badge className={getDifficultyColor(topic.difficulty)}>
+              {topic.difficulty}
+            </Badge>
+          </div>
+          <CardTitle className="text-xl group-hover:text-blue-600 transition-colors">
+            {topic.name}
+          </CardTitle>
+          <CardDescription className="text-sm">
+            {topic.description}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="mt-2 text-center">
+            <span className="text-sm text-blue-600 font-medium group-hover:text-blue-700">
+              Click to start learning →
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Group CSEC topics by module
+  const csecByModule: Record<string, typeof csecMathTopics> = {};
+  csecMathTopics.forEach(t => {
+    const mod = (t as { module?: string }).module || 'Module 1';
+    if (!csecByModule[mod]) csecByModule[mod] = [];
+    csecByModule[mod].push(t);
+  });
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {topics.map((topic) => {
-        const IconComponent = topic.icon;
-        return (
-          <Card 
-            key={topic.id}
-            className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group"
-            onClick={() => onTopicSelect(topic.name)}
+    <div>
+      {isMath && (
+        <div className="flex gap-3 mb-6">
+          <Button
+            variant={mode === 'general' ? 'default' : 'outline'}
+            onClick={() => setMode('general')}
+            className="rounded-full"
           >
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className={`bg-gradient-to-r ${topic.color} p-3 rounded-full group-hover:scale-110 transition-transform duration-300`}>
-                  <IconComponent className="h-6 w-6 text-white" />
-                </div>
-                <Badge className={getDifficultyColor(topic.difficulty)}>
-                  {topic.difficulty}
-                </Badge>
-              </div>
-              <CardTitle className="text-xl group-hover:text-blue-600 transition-colors">
-                {topic.name}
-              </CardTitle>
-              <CardDescription className="text-sm">
-                {topic.description}
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Progress</span>
-                  <span className="font-medium">0%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                  <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full" style={{width: '0%'}}></div>
-                </div>
-              </div>
-              
-              <div className="mt-4 text-center">
-                <span className="text-sm text-blue-600 font-medium group-hover:text-blue-700">
-                  Click to start learning →
+            Primary & Junior Secondary
+          </Button>
+          <Button
+            variant={mode === 'csec' ? 'default' : 'outline'}
+            onClick={() => setMode('csec')}
+            className="rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white border-0 hover:from-blue-700 hover:to-purple-700"
+          >
+            CSEC Mathematics (Form 4–5)
+          </Button>
+        </div>
+      )}
+
+      {isMath && mode === 'csec' ? (
+        <div className="space-y-8">
+          {Object.entries(csecByModule).map(([mod, topics]) => (
+            <div key={mod}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-px flex-1 bg-gradient-to-r from-blue-200 to-purple-200" />
+                <span className="text-sm font-semibold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                  {CSEC_MODULE_LABELS[mod] || mod}
                 </span>
+                <div className="h-px flex-1 bg-gradient-to-r from-purple-200 to-blue-200" />
               </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {topics.map(renderTopicCard)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {generalTopics.map(renderTopicCard)}
+        </div>
+      )}
     </div>
   );
 };
