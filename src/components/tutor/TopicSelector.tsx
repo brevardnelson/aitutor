@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calculator, Percent, Divide, Plus, Hash, Square, RotateCcw, Triangle, Ruler, Grid3X3, Box, Clock, Compass, Move, Beaker, Timer, BookOpen, PenTool, MessageSquare, FileText, Headphones, Eye, Edit3, Users, Globe, Sparkles, TrendingUp, ShoppingCart, CircleDot, BarChart3, Network, Star, Sliders, ArrowLeftRight, Layers, GitFork, Infinity, Activity, FlipHorizontal, Workflow } from 'lucide-react';
+import { Calculator, Percent, Divide, Plus, Hash, Square, RotateCcw, Triangle, Ruler, Grid3X3, Box, Clock, Compass, Move, Beaker, Timer, BookOpen, PenTool, MessageSquare, FileText, Headphones, Eye, Edit3, Users, Globe, Sparkles, TrendingUp, ShoppingCart, CircleDot, BarChart3, Network, Star, Sliders, ArrowLeftRight, Layers, GitFork, Infinity, Activity, FlipHorizontal, Workflow, X } from 'lucide-react';
 
 interface TopicSelectorProps {
   onTopicSelect: (topic: string) => void;

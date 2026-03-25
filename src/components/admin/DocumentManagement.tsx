@@ -23,7 +23,8 @@ import {
   BarChart3,
   BookOpen,
   Settings,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { ObjectUploader } from './ObjectUploader';
 import { GRADE_LEVELS } from '../../../shared/schema';
@@ -110,6 +111,7 @@ const DocumentManagement: React.FC = () => {
   }, [currentPage, searchTerm, selectedGrade, selectedSubject, selectedContentType]);
 
   const loadDocuments = async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams({
         limit: documentsPerPage.toString(),
@@ -121,7 +123,7 @@ const DocumentManagement: React.FC = () => {
       });
 
       const response = await fetch(`/api/admin/documents?${params}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token')}` }
       });
       
       if (response.ok) {
@@ -139,7 +141,7 @@ const DocumentManagement: React.FC = () => {
   const loadCategories = async () => {
     try {
       const response = await fetch('/api/admin/document-categories', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token')}` }
       });
       
       if (response.ok) {
@@ -154,7 +156,7 @@ const DocumentManagement: React.FC = () => {
   const loadTrainingSessions = async () => {
     try {
       const response = await fetch('/api/admin/ai-training', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token')}` }
       });
       
       if (response.ok) {
@@ -170,7 +172,7 @@ const DocumentManagement: React.FC = () => {
     const response = await fetch('/api/admin/documents/upload-url', {
       method: 'POST',
       headers: { 
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token')}`,
         'Content-Type': 'application/json'
       }
     });
@@ -202,7 +204,7 @@ const DocumentManagement: React.FC = () => {
 
         const response = await fetch('/api/admin/documents/upload', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token')}` },
           body: formData
         });
 
@@ -252,7 +254,7 @@ const DocumentManagement: React.FC = () => {
       const response = await fetch('/api/admin/ai-training', {
         method: 'POST',
         headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -351,12 +353,11 @@ const DocumentManagement: React.FC = () => {
                         <SelectValue placeholder="Select content type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="textbook">Textbook</SelectItem>
+                        <SelectItem value="lesson">Lesson Plan</SelectItem>
                         <SelectItem value="worksheet">Worksheet</SelectItem>
-                        <SelectItem value="curriculum_standard">Curriculum Standard</SelectItem>
-                        <SelectItem value="assessment">Assessment Guide</SelectItem>
-                        <SelectItem value="lesson_plan">Lesson Plan</SelectItem>
-                        <SelectItem value="reference_material">Reference Material</SelectItem>
+                        <SelectItem value="assessment">Assessment</SelectItem>
+                        <SelectItem value="reference">Reference Material</SelectItem>
+                        <SelectItem value="multimedia">Multimedia</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -429,15 +430,21 @@ const DocumentManagement: React.FC = () => {
                         <SelectValue placeholder="Select subject" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="math">Mathematics</SelectItem>
-                        <SelectItem value="english">English Language</SelectItem>
-                        <SelectItem value="science">Science</SelectItem>
-                        <SelectItem value="social_studies">Social Studies</SelectItem>
-                        <SelectItem value="history">History</SelectItem>
-                        <SelectItem value="geography">Geography</SelectItem>
-                        <SelectItem value="physics">Physics</SelectItem>
-                        <SelectItem value="chemistry">Chemistry</SelectItem>
-                        <SelectItem value="biology">Biology</SelectItem>
+                        <SelectItem value="Mathematics">Mathematics</SelectItem>
+                        <SelectItem value="English Language Arts">English Language Arts</SelectItem>
+                        <SelectItem value="Science">Science</SelectItem>
+                        <SelectItem value="Social Studies">Social Studies</SelectItem>
+                        <SelectItem value="History">History</SelectItem>
+                        <SelectItem value="Geography">Geography</SelectItem>
+                        <SelectItem value="Physics">Physics</SelectItem>
+                        <SelectItem value="Chemistry">Chemistry</SelectItem>
+                        <SelectItem value="Biology">Biology</SelectItem>
+                        <SelectItem value="Reading">Reading</SelectItem>
+                        <SelectItem value="Writing">Writing</SelectItem>
+                        <SelectItem value="Computer Science">Computer Science</SelectItem>
+                        <SelectItem value="Art">Art</SelectItem>
+                        <SelectItem value="Music">Music</SelectItem>
+                        <SelectItem value="Physical Education">Physical Education</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -568,9 +575,21 @@ const DocumentManagement: React.FC = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">All subjects</SelectItem>
-                      <SelectItem value="math">Mathematics</SelectItem>
-                      <SelectItem value="english">English</SelectItem>
-                      <SelectItem value="science">Science</SelectItem>
+                      <SelectItem value="Mathematics">Mathematics</SelectItem>
+                      <SelectItem value="English Language Arts">English Language Arts</SelectItem>
+                      <SelectItem value="Science">Science</SelectItem>
+                      <SelectItem value="Social Studies">Social Studies</SelectItem>
+                      <SelectItem value="History">History</SelectItem>
+                      <SelectItem value="Geography">Geography</SelectItem>
+                      <SelectItem value="Physics">Physics</SelectItem>
+                      <SelectItem value="Chemistry">Chemistry</SelectItem>
+                      <SelectItem value="Biology">Biology</SelectItem>
+                      <SelectItem value="Reading">Reading</SelectItem>
+                      <SelectItem value="Writing">Writing</SelectItem>
+                      <SelectItem value="Computer Science">Computer Science</SelectItem>
+                      <SelectItem value="Art">Art</SelectItem>
+                      <SelectItem value="Music">Music</SelectItem>
+                      <SelectItem value="Physical Education">Physical Education</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -583,10 +602,11 @@ const DocumentManagement: React.FC = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">All types</SelectItem>
-                      <SelectItem value="textbook">Textbook</SelectItem>
+                      <SelectItem value="lesson">Lesson Plan</SelectItem>
                       <SelectItem value="worksheet">Worksheet</SelectItem>
-                      <SelectItem value="curriculum_standard">Curriculum Standard</SelectItem>
                       <SelectItem value="assessment">Assessment</SelectItem>
+                      <SelectItem value="reference">Reference Material</SelectItem>
+                      <SelectItem value="multimedia">Multimedia</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -596,7 +616,25 @@ const DocumentManagement: React.FC = () => {
 
           {/* Document List */}
           <div className="grid gap-4">
-            {documents.map((document) => (
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mr-3" />
+                <span className="text-gray-600 text-lg">Loading documents...</span>
+              </div>
+            ) : documents.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <FileText className="h-12 w-12 text-gray-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">No documents found</h3>
+                  <p className="text-gray-500 max-w-sm">
+                    {searchTerm || selectedGrade || selectedSubject || selectedContentType
+                      ? 'No documents match your current filters. Try adjusting your search criteria.'
+                      : 'Upload your first curriculum document to get started with AI model training.'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
+            {!loading && documents.map((document) => (
               <Card key={document.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
