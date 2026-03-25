@@ -53,7 +53,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/admin">
                     <LayoutDashboard className="h-4 w-4 mr-2" />
-                    Admin
+                    Admin Dashboard
                   </Link>
                 </Button>
               )}
