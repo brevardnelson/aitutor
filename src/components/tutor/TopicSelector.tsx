@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calculator, Percent, Divide, Plus, Hash, Square, RotateCcw, Triangle, Ruler, Grid3X3, Box, Clock, Compass, Move, Beaker, Timer, BookOpen, PenTool, MessageSquare, FileText, Headphones, Eye, Edit3, Users, Globe, Sparkles, TrendingUp, ShoppingCart, CircleDot, BarChart3, Network, Star, Sliders, ArrowLeftRight, Layers, GitFork, Infinity, Activity, FlipHorizontal, Workflow, X } from 'lucide-react';
+import { Calculator, Percent, Divide, Plus, Hash, Square, RotateCcw, Triangle, Ruler, Grid3X3, Box, Clock, Compass, Move, Beaker, Timer, BookOpen, PenTool, MessageSquare, FileText, Headphones, Eye, Edit3, Users, Globe, Sparkles, TrendingUp, ShoppingCart, CircleDot, BarChart3, Network, Star, Sliders, ArrowLeftRight, Layers, GitFork, Infinity, Activity, FlipHorizontal, Workflow, X, FlaskConical, Atom, Zap } from 'lucide-react';
 
 interface TopicSelectorProps {
   onTopicSelect: (topic: string) => void;
@@ -271,6 +271,30 @@ const scienceTopics = [
     icon: Eye,
     difficulty: 'Advanced',
     color: 'from-red-500 to-red-600'
+  },
+  {
+    id: 'The Scientific Method',
+    name: 'The Scientific Method',
+    description: 'Steps of scientific inquiry: observe, hypothesize, test, and conclude',
+    icon: FlaskConical,
+    difficulty: 'Beginner',
+    color: 'from-teal-500 to-teal-600'
+  },
+  {
+    id: 'Matter and Atoms',
+    name: 'Matter and Atoms',
+    description: 'Explore the building blocks of matter and atomic structure',
+    icon: Atom,
+    difficulty: 'Beginner',
+    color: 'from-cyan-500 to-cyan-600'
+  },
+  {
+    id: 'Energy and Forces',
+    name: 'Energy and Forces',
+    description: 'Understand different forms of energy and how forces work',
+    icon: Zap,
+    difficulty: 'Beginner',
+    color: 'from-yellow-500 to-yellow-600'
   }
 ];
 
