@@ -153,7 +153,7 @@ export class DashboardStorage {
         hints_used, avg_attempts_per_problem, difficulty, session_type
       ) VALUES (
         ${session.studentId}, ${session.subject}, ${session.topic}, 
-        ${session.startTime}, ${session.duration}, ${session.problemsAttempted},
+        ${session.startTime.toISOString()}, ${session.duration}, ${session.problemsAttempted},
         ${session.problemsCompleted}, ${session.correctAnswers}, ${session.hintsUsed},
         ${session.avgAttemptsPerProblem}, ${session.difficulty}, ${session.sessionType}
       ) RETURNING id
