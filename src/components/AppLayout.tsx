@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { LogOut, BookOpen } from 'lucide-react';
+import { LogOut, BookOpen, LayoutDashboard } from 'lucide-react';
 import Footer from '@/components/Footer';
 import PublicHeader from '@/components/PublicHeader';
 
@@ -49,6 +49,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
               <span className="text-sm text-gray-700 hidden sm:inline">
                 {user.fullName} ({user.primaryRole})
               </span>
+              {(user.primaryRole === 'system_admin' || user.primaryRole === 'school_admin') && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/admin">
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    Admin
+                  </Link>
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
