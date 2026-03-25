@@ -3,7 +3,7 @@
 
 import type { AuthUser, UserRole, School, UserRoleAssignment } from '@/types/auth';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = '/api';
 
 interface APIAuthResult {
   success: boolean;

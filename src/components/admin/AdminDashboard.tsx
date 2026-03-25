@@ -14,6 +14,7 @@ import { SchoolManagement } from './SchoolManagement';
 import { UserManagement } from './UserManagement';
 import { SystemOverview } from './SystemOverview';
 import DocumentManagement from './DocumentManagement';
+import { RBACLoginForm } from '@/components/auth/RBACLoginForm';
 
 export const AdminDashboard: React.FC = () => {
   const { user, currentSchool, availableSchools, hasRole, isLoading } = useRBAC();
@@ -32,9 +33,16 @@ export const AdminDashboard: React.FC = () => {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-gray-700 font-medium">Please sign in to continue.</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-500 text-sm mt-1">Sign in with your admin account to continue</p>
+          </div>
+          <RBACLoginForm />
+          <div className="text-center mt-4">
+            <a href="/" className="text-sm text-blue-600 hover:underline">← Back to main site</a>
+          </div>
         </div>
       </div>
     );
