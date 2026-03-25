@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { rbacAuthAPI } from '@/lib/rbac-auth-api';
 import type { AuthUser, UserRole, School } from '@/types/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface RBACContextType {
   user: AuthUser | null;
@@ -51,10 +52,45 @@ interface RBACContextType {
 const RBACContext = createContext<RBACContextType | null>(null);
 
 export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { user: jwtUser, isLoading: jwtLoading } = useAuth();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentSchool, setCurrentSchool] = useState<School | null>(null);
   const [availableSchools, setAvailableSchools] = useState<School[]>([]);
+
+  // Sync RBAC user from the JWT auth context so admin panel recognises
+  // users who logged in via the main app flow (not the legacy RBAC session).
+  useEffect(() => {
+    if (jwtLoading) return;
+
+    if (jwtUser) {
+      const syntheticRole = {
+        id: 0,
+        userId: jwtUser.id,
+        role: jwtUser.primaryRole as UserRole,
+        permissions: jwtUser.primaryRole === 'system_admin'
+          ? ['manage_system', 'manage_all_schools']
+          : jwtUser.primaryRole === 'school_admin'
+          ? ['manage_teachers', 'manage_students', 'manage_parents']
+          : [],
+        isActive: true,
+        assignedAt: new Date(),
+      };
+      const rbacUser: AuthUser = {
+        id: jwtUser.id,
+        email: jwtUser.email,
+        full_name: jwtUser.fullName,
+        is_active: true,
+        roles: [syntheticRole],
+        primaryRole: jwtUser.primaryRole as UserRole,
+      };
+      setUser(rbacUser);
+      setIsLoading(false);
+    } else {
+      // No JWT user — fall back to legacy RBAC session check
+      checkAuthState();
+    }
+  }, [jwtUser, jwtLoading]);
 
   useEffect(() => {
     checkAuthState();

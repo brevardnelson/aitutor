@@ -16,11 +16,28 @@ import { SystemOverview } from './SystemOverview';
 import DocumentManagement from './DocumentManagement';
 
 export const AdminDashboard: React.FC = () => {
-  const { user, currentSchool, availableSchools, hasRole } = useRBAC();
+  const { user, currentSchool, availableSchools, hasRole, isLoading } = useRBAC();
   const [activeTab, setActiveTab] = useState('overview');
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Loading admin dashboard…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
-    return <div>Please sign in to continue.</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-gray-700 font-medium">Please sign in to continue.</p>
+        </div>
+      </div>
+    );
   }
 
   const isSystemAdmin = hasRole('system_admin');
