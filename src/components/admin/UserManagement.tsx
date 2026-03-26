@@ -28,25 +28,17 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function getPrimaryRole(roles: AdminUser['roles']): string {
-  const order = ['system_admin', 'school_admin', 'teacher', 'parent', 'student'];
-  for (const r of order) {
-    if (roles.some(role => role.role === r && role.isActive)) return r;
-  }
-  return roles[0]?.role ?? 'unknown';
-}
-
 function RoleBadge({ role }: { role: string }) {
   const colorClass = ROLE_COLORS[role] || 'bg-gray-100 text-gray-800';
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
-      {role.replace('_', ' ')}
+      {role.replace(/_/g, ' ')}
     </span>
   );
 }
 
 function UserRow({ user }: { user: AdminUser }) {
-  const primaryRole = getPrimaryRole(user.roles);
+  const activeRoles = user.roles.filter(r => r.isActive);
   return (
     <div className="flex items-center justify-between p-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -60,9 +52,11 @@ function UserRow({ user }: { user: AdminUser }) {
           <p className="text-xs text-gray-500 truncate">{user.email}</p>
         </div>
       </div>
-      <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-        <RoleBadge role={primaryRole} />
-        <span className="text-xs text-gray-400 hidden sm:block">{formatDate(user.createdAt)}</span>
+      <div className="flex items-center gap-2 flex-shrink-0 ml-3 flex-wrap justify-end">
+        {activeRoles.length > 0
+          ? activeRoles.map(r => <RoleBadge key={r.role} role={r.role} />)
+          : <RoleBadge role="no role" />}
+        <span className="text-xs text-gray-400 hidden sm:block ml-1">{formatDate(user.createdAt)}</span>
       </div>
     </div>
   );
@@ -77,15 +71,15 @@ function UserList({
   onInvite,
 }: {
   users: AdminUser[];
-  roleFilter: string;
+  roleFilter: string | null;
   emptyLabel: string;
   icon: React.ReactNode;
   schoolName: string;
   onInvite: () => void;
 }) {
-  const filtered = users.filter(u =>
-    u.roles.some(r => r.role === roleFilter && r.isActive)
-  );
+  const filtered = roleFilter
+    ? users.filter(u => u.roles.some(r => r.role === roleFilter && r.isActive))
+    : users;
 
   return (
     <Card>
@@ -127,7 +121,7 @@ export const UserManagement: React.FC = () => {
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('teachers');
+  const [activeTab, setActiveTab] = useState('all');
 
   const [inviteData, setInviteData] = useState({
     email: '',
@@ -315,20 +309,35 @@ export const UserManagement: React.FC = () => {
         </Alert>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="teachers" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="all" className="flex items-center gap-1">
+              <Users className="h-4 w-4" />
+              All
+            </TabsTrigger>
+            <TabsTrigger value="teachers" className="flex items-center gap-1">
               <GraduationCap className="h-4 w-4" />
               Teachers
             </TabsTrigger>
-            <TabsTrigger value="parents" className="flex items-center gap-2">
+            <TabsTrigger value="parents" className="flex items-center gap-1">
               <User className="h-4 w-4" />
               Parents
             </TabsTrigger>
-            <TabsTrigger value="students" className="flex items-center gap-2">
+            <TabsTrigger value="students" className="flex items-center gap-1">
               <Users className="h-4 w-4" />
               Students
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="all">
+            <UserList
+              users={users}
+              roleFilter={null}
+              emptyLabel="User"
+              icon={<Users className="h-5 w-5" />}
+              schoolName={schoolName}
+              onInvite={() => setIsInviteDialogOpen(true)}
+            />
+          </TabsContent>
 
           <TabsContent value="teachers">
             <UserList
