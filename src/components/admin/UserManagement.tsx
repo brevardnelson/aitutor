@@ -210,6 +210,7 @@ export const UserManagement: React.FC = () => {
   const [children, setChildren] = useState<AdminChild[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [childFetchError, setChildFetchError] = useState<string | null>(null);
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
@@ -255,6 +256,9 @@ export const UserManagement: React.FC = () => {
 
       if (childResult.success && childResult.children) {
         setChildren(childResult.children);
+        setChildFetchError(null);
+      } else if (!childResult.success) {
+        setChildFetchError(childResult.error || 'Failed to load child profiles');
       }
     } catch {
       setFetchError('Unexpected error loading users');
@@ -482,7 +486,14 @@ export const UserManagement: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="children">
-            <ChildList children={children} schoolName={schoolName} />
+            {childFetchError ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{childFetchError}</AlertDescription>
+              </Alert>
+            ) : (
+              <ChildList children={children} schoolName={schoolName} />
+            )}
           </TabsContent>
         </Tabs>
       )}

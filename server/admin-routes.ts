@@ -355,9 +355,19 @@ router.get('/children', authenticateToken, requireSystemAdmin, async (req: Reque
 // GET /api/admin/school-children/:schoolId - Get child profiles for a school
 router.get('/school-children/:schoolId', authenticateToken, async (req: Request, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
     const schoolId = parseInt(req.params.schoolId, 10);
     if (isNaN(schoolId)) {
       return res.status(400).json({ error: 'Invalid school ID' });
+    }
+
+    // Verify the requesting user is authorized to access this school
+    const hasAccess = await verifySchoolAccess(req.user, schoolId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this school', schoolId });
     }
 
     const parentUsers = schema.users;
