@@ -8,6 +8,31 @@ async function ensureSchemaColumns() {
     await db.execute(sql`
       ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS school_id INTEGER REFERENCES schools(id);
     `);
+    // Back-fill class_enrollments.school_id from the class's school
+    await db.execute(sql`
+      UPDATE class_enrollments ce
+      SET school_id = c.school_id
+      FROM classes c
+      WHERE ce.class_id = c.id AND ce.school_id IS NULL AND c.school_id IS NOT NULL;
+    `);
+    // Back-fill student_schools from class_enrollments where missing
+    await db.execute(sql`
+      INSERT INTO student_schools (student_id, school_id, is_active)
+      SELECT DISTINCT ce.student_id, c.school_id, true
+      FROM class_enrollments ce
+      JOIN classes c ON c.id = ce.class_id
+      WHERE c.school_id IS NOT NULL
+      ON CONFLICT (student_id, school_id) DO NOTHING;
+    `);
+    // Back-fill user_roles.school_id for school_admin and teacher roles that are missing it
+    await db.execute(sql`
+      UPDATE user_roles ur
+      SET school_id = s.id
+      FROM schools s
+      WHERE ur.role IN ('school_admin', 'teacher')
+        AND ur.school_id IS NULL
+        AND (SELECT COUNT(*) FROM schools) = 1;
+    `);
     console.log('✅ Schema columns verified');
   } catch (e) {
     console.log('Schema column check skipped (may already exist)');
@@ -139,6 +164,14 @@ export async function seedDemoDataIfEmpty() {
         { studentId: insertedStudents[3].id, classId: class2.id, schoolId: school.id, isActive: true },
       ]) {
         await tx.insert(schema.classEnrollments).values(enrollment);
+      }
+
+      for (const s of insertedStudents) {
+        await tx.insert(schema.studentSchools).values({
+          studentId: s.id,
+          schoolId: school.id,
+          isActive: true,
+        });
       }
 
       console.log('✅ Demo data seeded successfully! (' + insertedUsers.length + ' users, ' + insertedStudents.length + ' students)');

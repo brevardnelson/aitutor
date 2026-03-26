@@ -4,7 +4,7 @@ import express, { Request, Response } from 'express';
 import Joi from 'joi';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, and, count, sql } from 'drizzle-orm';
+import { eq, and, count, sql, inArray } from 'drizzle-orm';
 import * as schema from '../shared/schema';
 import { authenticateToken, requireSystemAdmin, requireSchoolAdmin } from './auth-middleware';
 import { verifySchoolAccess } from './resource-authorization';
@@ -370,6 +370,30 @@ router.get('/school-children/:schoolId', authenticateToken, async (req: Request,
       return res.status(403).json({ error: 'Access denied to this school', schoolId });
     }
 
+    // Collect studentIds via student_schools (primary) and class_enrollments (fallback)
+    const viaStudentSchools = await db.select({ studentId: schema.studentSchools.studentId })
+      .from(schema.studentSchools)
+      .where(and(
+        eq(schema.studentSchools.schoolId, schoolId),
+        eq(schema.studentSchools.isActive, true),
+      ));
+
+    const viaClassEnrollments = await db.select({ studentId: schema.classEnrollments.studentId })
+      .from(schema.classEnrollments)
+      .where(and(
+        eq(schema.classEnrollments.schoolId, schoolId),
+        eq(schema.classEnrollments.isActive, true),
+      ));
+
+    const studentIdSet = new Set<number>([
+      ...viaStudentSchools.map(r => r.studentId),
+      ...viaClassEnrollments.map(r => r.studentId),
+    ]);
+
+    if (studentIdSet.size === 0) {
+      return res.json({ success: true, children: [] });
+    }
+
     const parentUsers = schema.users;
     const rows = await db.select({
       id: schema.students.id,
@@ -383,12 +407,8 @@ router.get('/school-children/:schoolId', authenticateToken, async (req: Request,
       parentEmail: parentUsers.email,
     })
     .from(schema.students)
-    .innerJoin(schema.studentSchools, and(
-      eq(schema.studentSchools.studentId, schema.students.id),
-      eq(schema.studentSchools.schoolId, schoolId),
-      eq(schema.studentSchools.isActive, true),
-    ))
     .leftJoin(parentUsers, eq(parentUsers.id, schema.students.parentId))
+    .where(inArray(schema.students.id, Array.from(studentIdSet)))
     .orderBy(parentUsers.fullName, schema.students.name);
 
     res.json({ success: true, children: rows });
