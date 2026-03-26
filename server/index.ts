@@ -353,7 +353,7 @@ app.post('/api/ocr/handwriting',
 // Voice Chat AI endpoint
 app.post('/api/ai/voice-chat', async (req, res) => {
   try {
-    const { messages, topic, subject, gradeLevel, targetExam } = req.body;
+    const { messages, topic, subject, gradeLevel, targetExam, currentQuestion } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
@@ -366,12 +366,17 @@ app.post('/api/ai/voice-chat', async (req, res) => {
       ? `\nTarget Exam: ${String(targetExam).split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
       : '';
     const topicInfo = topic ? `\nCurrent Topic: ${topic}` : '';
+    const questionInfo = currentQuestion
+      ? `\nCurrent Question the student is working on: "${currentQuestion}"`
+      : '';
 
-    const systemPrompt = `You are a friendly, encouraging Caribbean AI tutor having a spoken conversation with a student.${gradeLevelInfo}${examInfo}${topicInfo}
+    const systemPrompt = `You are a friendly, encouraging Caribbean AI tutor having a spoken conversation with a student.${gradeLevelInfo}${examInfo}${topicInfo}${questionInfo}
 
 You are speaking OUT LOUD, so keep your responses SHORT and CONVERSATIONAL — 1-3 sentences maximum. No bullet points, no markdown, no numbered lists. Speak naturally as if talking to the student face to face.
 
 Use the Socratic method: guide the student with questions rather than giving direct answers. Be warm, patient, and culturally relevant to Caribbean students. Reference local examples when helpful.
+
+When the student asks for help with the current question, guide them step by step through the problem without giving away the answer directly.
 
 If the student asks something off-topic, gently redirect them back to their studies.`;
 

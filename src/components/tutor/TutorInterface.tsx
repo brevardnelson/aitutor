@@ -30,6 +30,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [testConfig, setTestConfig] = useState<TestConfig | null>(null);
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState<string | null>(null);
 
   // Get AI model info for this subject
   const modelInfo = aiService.getModelInfo(subject);
@@ -48,6 +49,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
   const handleTopicSelect = (topic: string) => {
     setSelectedTopic(topic);
     setViewMode('problem');
+    setCurrentQuestion(null);
   };
 
   const handleStartTest = (type: 'full' | 'drill', topics: string[], problemCount: number) => {
@@ -95,7 +97,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
                 <h2 className="text-2xl font-bold text-gray-900">{selectedTopic}</h2>
               </div>
             </div>
-            <ProblemSolver topic={selectedTopic!} subject={subject} />
+            <ProblemSolver topic={selectedTopic!} subject={subject} onQuestionChange={setCurrentQuestion} />
           </div>
         );
       
@@ -216,6 +218,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
             subject={subject}
             gradeLevel={currentChild.gradeLevel}
             targetExam={currentChild.targetExam}
+            currentQuestion={currentQuestion ?? undefined}
             onClose={() => setVoiceChatOpen(false)}
           />
         )}

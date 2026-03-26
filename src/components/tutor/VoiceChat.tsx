@@ -33,6 +33,7 @@ interface VoiceChatProps {
   subject?: string;
   gradeLevel?: string;
   targetExam?: string;
+  currentQuestion?: string;
   onClose: () => void;
 }
 
@@ -43,7 +44,7 @@ declare global {
   }
 }
 
-const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }: VoiceChatProps) => {
+const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, currentQuestion, onClose }: VoiceChatProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -227,6 +228,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
           subject,
           gradeLevel,
           targetExam,
+          currentQuestion,
         }),
       });
 
@@ -248,7 +250,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
       };
       setMessages(prev => [...prev, errMsg]);
     }
-  }, [topic, subject, gradeLevel, targetExam, speak]);
+  }, [topic, subject, gradeLevel, targetExam, currentQuestion, speak]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -345,9 +347,14 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
 
   useEffect(() => {
     if (messages.length === 0) {
-      const greeting = topic
-        ? `Hi there! I'm your AI tutor. I see you're working on ${topic}. What would you like help with?`
-        : `Hi there! I'm your AI tutor. What would you like to work on today?`;
+      let greeting: string;
+      if (currentQuestion) {
+        greeting = `Hi there! I can see you're working on: "${currentQuestion}". What would you like help with?`;
+      } else if (topic) {
+        greeting = `Hi there! I'm your AI tutor. I see you're working on ${topic}. What would you like help with?`;
+      } else {
+        greeting = `Hi there! I'm your AI tutor. What would you like to work on today?`;
+      }
       setMessages([{ role: 'assistant', content: greeting }]);
       setTimeout(() => speak(greeting), 500);
     }

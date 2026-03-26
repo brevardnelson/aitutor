@@ -27,9 +27,10 @@ interface GuidedTutorProps {
   subject?: Subject;
   onComplete: () => void;
   onReset?: () => void;
+  onQuestionChange?: (question: string) => void;
 }
 
-const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onComplete, onReset }) => {
+const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onComplete, onReset, onQuestionChange }) => {
   const { currentChild } = useAppContext();
   
   const getInitialQuestion = () => {
@@ -56,7 +57,14 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
   const [attempts, setAttempts] = useState(0);
   const [useHandwriting, setUseHandwriting] = useState(false);
   const [recognisedText, setRecognisedText] = useState('');
-  
+
+  // Notify parent whenever the active question changes (used by voice chat)
+  React.useEffect(() => {
+    if (currentQuestion?.problem && onQuestionChange) {
+      onQuestionChange(currentQuestion.problem);
+    }
+  }, [currentQuestion, onQuestionChange]);
+
   // Session-wide aggregate counters for proper endSession tracking
   const [problemsAttempted, setProblemsAttempted] = useState(0);
   const [problemsCompleted, setProblemsCompleted] = useState(0);
