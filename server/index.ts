@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { dashboardAPI } from './api';
 import authRoutes from './auth-routes';
 import adminRoutes from './admin-routes';
@@ -20,6 +21,10 @@ const anthropicClient = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '',
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || undefined,
 });
+
+const openaiClient = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -390,6 +395,45 @@ If the student asks something off-topic, gently redirect them back to their stud
     console.error('Voice chat error:', error);
     res.status(500).json({
       error: 'Voice chat failed',
+      message: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+// TTS endpoint using OpenAI
+app.post('/api/ai/tts', authenticateToken, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { text, voice } = req.body;
+
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'text is required' });
+    }
+
+    if (!openaiClient) {
+      return res.status(503).json({ error: 'OpenAI TTS not configured' });
+    }
+
+    const allowedVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    const selectedVoice = allowedVoices.includes(voice) ? voice : 'nova';
+
+    const mp3 = await openaiClient.audio.speech.create({
+      model: 'tts-1',
+      voice: selectedVoice as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
+      input: text,
+    });
+
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Content-Length', buffer.length.toString());
+    res.send(buffer);
+  } catch (error: unknown) {
+    console.error('TTS endpoint error:', error);
+    res.status(500).json({
+      error: 'TTS failed',
       message: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : 'Internal server error',
     });
   }

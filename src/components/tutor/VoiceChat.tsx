@@ -10,6 +10,19 @@ import {
 const VOICE_KEY = 'caribbeanAI_tutor_voice';
 const PREVIEW_TEXT = "Hi there! I'm your AI tutor. How can I help you today?";
 
+const OPENAI_VOICES = [
+  { name: 'alloy', label: 'Alloy', description: 'Neutral & balanced' },
+  { name: 'echo', label: 'Echo', description: 'Clear & articulate' },
+  { name: 'fable', label: 'Fable', description: 'Warm & expressive' },
+  { name: 'onyx', label: 'Onyx', description: 'Deep & authoritative' },
+  { name: 'nova', label: 'Nova', description: 'Energetic & friendly' },
+  { name: 'shimmer', label: 'Shimmer', description: 'Soft & gentle' },
+] as const;
+
+type OpenAIVoiceName = typeof OPENAI_VOICES[number]['name'];
+
+const DEFAULT_VOICE: OpenAIVoiceName = 'nova';
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -41,20 +54,29 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
   const [interimText, setInterimText] = useState('');
 
   const [showVoicePicker, setShowVoicePicker] = useState(false);
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
-    return localStorage.getItem(VOICE_KEY) ?? '';
+  const [selectedVoiceName, setSelectedVoiceName] = useState<OpenAIVoiceName>(() => {
+    const saved = localStorage.getItem(VOICE_KEY);
+    const isValid = OPENAI_VOICES.some(v => v.name === saved);
+    return (isValid ? saved : DEFAULT_VOICE) as OpenAIVoiceName;
   });
   const [previewingVoice, setPreviewingVoice] = useState<string>('');
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioBlobUrlRef = useRef<string | null>(null);
+  const ttsAbortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const selectedVoiceRef = useRef(selectedVoiceName);
+  const isMutedRef = useRef(isMuted);
 
   useEffect(() => {
     selectedVoiceRef.current = selectedVoiceName;
   }, [selectedVoiceName]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -74,65 +96,36 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     }
   }, [messages, interimText]);
 
-  const loadVoices = useCallback(() => {
+  const stopSpeaking = useCallback(() => {
+    if (ttsAbortRef.current) {
+      ttsAbortRef.current.abort();
+      ttsAbortRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    if (audioBlobUrlRef.current) {
+      URL.revokeObjectURL(audioBlobUrlRef.current);
+      audioBlobUrlRef.current = null;
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+    setPreviewingVoice('');
+  }, []);
+
+  const speakWithFallback = useCallback((text: string, voiceName?: OpenAIVoiceName) => {
     if (!window.speechSynthesis) return;
-    const all = window.speechSynthesis.getVoices();
-    const english = all.filter(v => v.lang.startsWith('en'));
-    if (english.length === 0) return;
-    setAvailableVoices(english);
-    const saved = localStorage.getItem(VOICE_KEY) ?? '';
-    const match = english.find(v => v.name === saved);
-    if (match) {
-      setSelectedVoiceName(match.name);
-    } else {
-      const fallback = english[0].name;
-      setSelectedVoiceName(fallback);
-      localStorage.setItem(VOICE_KEY, fallback);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadVoices();
-    const synth = window.speechSynthesis;
-    if (synth) {
-      synth.addEventListener('voiceschanged', loadVoices);
-    }
-    return () => {
-      if (synth) {
-        synth.removeEventListener('voiceschanged', loadVoices);
-      }
-    };
-  }, [loadVoices]);
-
-  const resolveVoice = useCallback((): SpeechSynthesisVoice | null => {
-    if (!window.speechSynthesis) return null;
-    const voices = window.speechSynthesis.getVoices();
-    const name = selectedVoiceRef.current;
-    if (name) {
-      const match = voices.find(v => v.name === name);
-      if (match) return match;
-    }
-    return voices.find(v => v.lang.startsWith('en')) ?? null;
-  }, []);
-
-  const speak = useCallback((text: string, overrideVoiceName?: string) => {
-    if (isMuted || !window.speechSynthesis) return;
-
-    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
     utterance.pitch = 1;
     utterance.volume = 1;
-
-    if (overrideVoiceName) {
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.name === overrideVoiceName);
-      if (match) utterance.voice = match;
-    } else {
-      const voice = resolveVoice();
-      if (voice) utterance.voice = voice;
-    }
-
+    const voices = window.speechSynthesis.getVoices();
+    const enVoice = voices.find(v => v.lang.startsWith('en'));
+    if (enVoice) utterance.voice = enVoice;
     utterance.onstart = () => {
       setIsSpeaking(true);
       setStatusText('AI Tutor is speaking...');
@@ -147,17 +140,74 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
       setPreviewingVoice('');
       setStatusText('Tap the mic to respond');
     };
-
     window.speechSynthesis.speak(utterance);
-  }, [isMuted, resolveVoice]);
-
-  const stopSpeaking = useCallback(() => {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setIsSpeaking(false);
-    setPreviewingVoice('');
   }, []);
+
+  const speak = useCallback(async (text: string, overrideVoiceName?: OpenAIVoiceName) => {
+    if (isMutedRef.current) return;
+
+    stopSpeaking();
+
+    const controller = new AbortController();
+    ttsAbortRef.current = controller;
+
+    const voice = overrideVoiceName ?? selectedVoiceRef.current;
+
+    try {
+      const response = await fetch('/api/ai/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ text, voice }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`TTS request failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+
+      if (controller.signal.aborted || isMutedRef.current) {
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      audioBlobUrlRef.current = url;
+
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.onplay = () => {
+        setIsSpeaking(true);
+        setStatusText('AI Tutor is speaking...');
+      };
+      audio.onended = () => {
+        setIsSpeaking(false);
+        setPreviewingVoice('');
+        setStatusText('Tap the mic to respond');
+        URL.revokeObjectURL(url);
+        audioBlobUrlRef.current = null;
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        setPreviewingVoice('');
+        setStatusText('Tap the mic to respond');
+        URL.revokeObjectURL(url);
+        audioBlobUrlRef.current = null;
+        audioRef.current = null;
+      };
+
+      await audio.play();
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.warn('OpenAI TTS failed, falling back to browser speech synthesis:', err);
+      if (!isMutedRef.current) {
+        speakWithFallback(text, overrideVoiceName);
+      }
+    }
+  }, [stopSpeaking, speakWithFallback]);
 
   const sendMessage = useCallback(async (userText: string) => {
     const newMessage: ChatMessage = { role: 'user', content: userText };
@@ -276,12 +326,12 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     setIsMuted(prev => !prev);
   }, [isMuted, stopSpeaking]);
 
-  const handleSelectVoice = useCallback((name: string) => {
+  const handleSelectVoice = useCallback((name: OpenAIVoiceName) => {
     setSelectedVoiceName(name);
     localStorage.setItem(VOICE_KEY, name);
   }, []);
 
-  const handlePreviewVoice = useCallback((name: string) => {
+  const handlePreviewVoice = useCallback((name: OpenAIVoiceName) => {
     stopSpeaking();
     setPreviewingVoice(name);
     speak(PREVIEW_TEXT, name);
@@ -366,55 +416,49 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
         {showVoicePicker ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto">
-              {availableVoices.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-sm text-gray-500 px-6 text-center">
-                  No voices found. Try opening this in Chrome or Safari.
-                </div>
-              ) : (
-                <ul className="divide-y divide-gray-100">
-                  {availableVoices.map(voice => {
-                    const isSelected = voice.name === selectedVoiceName;
-                    const isPreviewing = voice.name === previewingVoice;
-                    return (
-                      <li key={voice.name} className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-                        <div
-                          role="radio"
-                          aria-checked={isSelected}
-                          tabIndex={0}
-                          onClick={() => handleSelectVoice(voice.name)}
-                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleSelectVoice(voice.name); }}
-                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer focus:outline-none"
-                        >
-                          <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                            isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                          }`}>
-                            {isSelected && <Check className="h-3 w-3 text-white" />}
-                          </div>
-                          <div className="min-w-0">
-                            <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
-                              {voice.name}
-                            </p>
-                            <p className="text-xs text-gray-400">{voice.lang}</p>
-                          </div>
+              <ul className="divide-y divide-gray-100">
+                {OPENAI_VOICES.map(voice => {
+                  const isSelected = voice.name === selectedVoiceName;
+                  const isPreviewing = voice.name === previewingVoice;
+                  return (
+                    <li key={voice.name} className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                      <div
+                        role="radio"
+                        aria-checked={isSelected}
+                        tabIndex={0}
+                        onClick={() => handleSelectVoice(voice.name)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleSelectVoice(voice.name); }}
+                        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer focus:outline-none"
+                      >
+                        <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                          isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                        }`}>
+                          {isSelected && <Check className="h-3 w-3 text-white" />}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => isPreviewing ? stopSpeaking() : handlePreviewVoice(voice.name)}
-                          className={`shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                            isPreviewing
-                              ? 'border-purple-300 bg-purple-100 text-purple-700'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-500 hover:text-blue-600'
-                          }`}
-                          title={isPreviewing ? 'Stop preview' : 'Preview this voice'}
-                        >
-                          <Play className="h-3 w-3" />
-                          {isPreviewing ? 'Stop' : 'Try'}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
+                            {voice.label}
+                          </p>
+                          <p className="text-xs text-gray-400">{voice.description}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => isPreviewing ? stopSpeaking() : handlePreviewVoice(voice.name)}
+                        className={`shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          isPreviewing
+                            ? 'border-purple-300 bg-purple-100 text-purple-700'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-500 hover:text-blue-600'
+                        }`}
+                        title={isPreviewing ? 'Stop preview' : 'Preview this voice'}
+                      >
+                        <Play className="h-3 w-3" />
+                        {isPreviewing ? 'Stop' : 'Try'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
             <div className="shrink-0 p-3 border-t bg-gray-50">
               <Button
@@ -422,7 +466,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
                 className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
                 onClick={() => { stopSpeaking(); setShowVoicePicker(false); }}
               >
-                Done — use {selectedVoiceName ? selectedVoiceName.split(' ')[0] : 'this voice'}
+                Done — use {OPENAI_VOICES.find(v => v.name === selectedVoiceName)?.label ?? selectedVoiceName}
               </Button>
             </div>
           </div>
@@ -512,7 +556,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
                   <p className="text-xs text-red-500 text-center">Voice not supported. Try Chrome or Safari.</p>
                 )}
                 {selectedVoiceName && !isListening && !isThinking && !isSpeaking && (
-                  <p className="text-xs text-gray-400">Voice: {selectedVoiceName}</p>
+                  <p className="text-xs text-gray-400">Voice: {OPENAI_VOICES.find(v => v.name === selectedVoiceName)?.label ?? selectedVoiceName}</p>
                 )}
               </div>
             </div>
