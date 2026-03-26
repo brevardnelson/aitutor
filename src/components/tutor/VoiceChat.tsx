@@ -78,16 +78,16 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     if (!window.speechSynthesis) return;
     const all = window.speechSynthesis.getVoices();
     const english = all.filter(v => v.lang.startsWith('en'));
-    if (english.length > 0) {
-      setAvailableVoices(english);
-      setSelectedVoiceName(prev => {
-        const saved = localStorage.getItem(VOICE_KEY) ?? '';
-        if (saved && english.some(v => v.name === saved)) return saved;
-        if (prev && english.some(v => v.name === prev)) return prev;
-        const fallback = english[0].name;
-        if (!saved) localStorage.setItem(VOICE_KEY, fallback);
-        return fallback;
-      });
+    if (english.length === 0) return;
+    setAvailableVoices(english);
+    const saved = localStorage.getItem(VOICE_KEY) ?? '';
+    const match = english.find(v => v.name === saved);
+    if (match) {
+      setSelectedVoiceName(match.name);
+    } else {
+      const fallback = english[0].name;
+      setSelectedVoiceName(fallback);
+      localStorage.setItem(VOICE_KEY, fallback);
     }
   }, []);
 
@@ -314,7 +314,6 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
       className="flex flex-col shadow-2xl border-2 border-blue-200 bg-white overflow-hidden"
       style={{ height: '520px', width: '360px' }}
     >
-      {/* ── Header ── */}
       <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -365,7 +364,6 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
 
       <CardContent className="flex flex-col flex-1 p-0 overflow-hidden">
         {showVoicePicker ? (
-          /* ── Voice Picker Panel ── */
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto">
               {availableVoices.length === 0 ? (
@@ -378,47 +376,39 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
                     const isSelected = voice.name === selectedVoiceName;
                     const isPreviewing = voice.name === previewingVoice;
                     return (
-                      <li key={voice.name}>
-                        <button
-                          type="button"
+                      <li key={voice.name} className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                        <div
+                          role="radio"
+                          aria-checked={isSelected}
+                          tabIndex={0}
                           onClick={() => handleSelectVoice(voice.name)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50 ${
-                            isSelected ? 'bg-blue-50' : ''
-                          }`}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleSelectVoice(voice.name); }}
+                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer focus:outline-none"
                         >
                           <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-500'
-                              : 'border-gray-300'
+                            isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
                           }`}>
                             {isSelected && <Check className="h-3 w-3 text-white" />}
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0">
                             <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
                               {voice.name}
                             </p>
                             <p className="text-xs text-gray-400">{voice.lang}</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={e => {
-                              e.stopPropagation();
-                              if (isPreviewing) {
-                                stopSpeaking();
-                              } else {
-                                handlePreviewVoice(voice.name);
-                              }
-                            }}
-                            className={`shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                              isPreviewing
-                                ? 'border-purple-300 bg-purple-100 text-purple-700'
-                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-500 hover:text-blue-600'
-                            }`}
-                            title={isPreviewing ? 'Stop preview' : 'Preview this voice'}
-                          >
-                            <Play className="h-3 w-3" />
-                            {isPreviewing ? 'Stop' : 'Try'}
-                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => isPreviewing ? stopSpeaking() : handlePreviewVoice(voice.name)}
+                          className={`shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            isPreviewing
+                              ? 'border-purple-300 bg-purple-100 text-purple-700'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-500 hover:text-blue-600'
+                          }`}
+                          title={isPreviewing ? 'Stop preview' : 'Preview this voice'}
+                        >
+                          <Play className="h-3 w-3" />
+                          {isPreviewing ? 'Stop' : 'Try'}
                         </button>
                       </li>
                     );
@@ -437,7 +427,6 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
             </div>
           </div>
         ) : (
-          /* ── Chat Panel ── */
           <>
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
               {messages.map((msg, i) => (
@@ -523,10 +512,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
                   <p className="text-xs text-red-500 text-center">Voice not supported. Try Chrome or Safari.</p>
                 )}
                 {selectedVoiceName && !isListening && !isThinking && !isSpeaking && (
-                  <p className="text-xs text-gray-400">
-                    Voice: {selectedVoiceName.split(' ')[0]}
-                    {selectedVoiceName.split(' ').length > 1 ? ' ' + selectedVoiceName.split(' ').slice(1).join(' ') : ''}
-                  </p>
+                  <p className="text-xs text-gray-400">Voice: {selectedVoiceName}</p>
                 )}
               </div>
             </div>
