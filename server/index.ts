@@ -401,12 +401,8 @@ If the student asks something off-topic, gently redirect them back to their stud
 });
 
 // TTS endpoint using OpenAI
-app.post('/api/ai/tts', authenticateToken, async (req, res) => {
+app.post('/api/ai/tts', async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
     const { text, voice } = req.body;
 
     if (!text || typeof text !== 'string') {
