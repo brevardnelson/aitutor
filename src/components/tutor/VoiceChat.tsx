@@ -313,7 +313,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
   return (
     <Card
       className="flex flex-col shadow-2xl border-2 border-blue-200 bg-white overflow-hidden"
-      style={{ height: '520px', width: '360px' }}
+      style={{ height: 'min(520px, calc(100vh - 7rem))', width: 'min(360px, calc(100vw - 2rem))' }}
     >
       <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 shrink-0">
         <div className="flex items-center justify-between">
