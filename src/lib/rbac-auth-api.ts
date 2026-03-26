@@ -34,6 +34,18 @@ export interface AdminUser {
   roles: { role: string; isActive: boolean; assignedAt: string | null }[];
 }
 
+export interface AdminChild {
+  id: number;
+  name: string;
+  gradeLevel: string | null;
+  targetExam: string | null;
+  age: number | null;
+  createdAt: string | null;
+  parentId: number | null;
+  parentName: string | null;
+  parentEmail: string | null;
+}
+
 interface APIStatsResult {
   success: boolean;
   stats?: {
@@ -296,6 +308,32 @@ export class RBACAuthAPI {
         return { success: false, error: data.error || 'Failed to fetch school users' };
       }
       return { success: true, users: data.users };
+    } catch (error) {
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  async getChildren(): Promise<{ success: boolean; children?: AdminChild[]; error?: string }> {
+    try {
+      const response = await this.authFetch(`${API_BASE_URL}/admin/children`);
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'Failed to fetch child profiles' };
+      }
+      return { success: true, children: data.children };
+    } catch (error) {
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  async getSchoolChildren(schoolId: number): Promise<{ success: boolean; children?: AdminChild[]; error?: string }> {
+    try {
+      const response = await this.authFetch(`${API_BASE_URL}/admin/school-children/${schoolId}`);
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'Failed to fetch school child profiles' };
+      }
+      return { success: true, children: data.children };
     } catch (error) {
       return { success: false, error: 'Network error' };
     }

@@ -326,6 +326,68 @@ router.get('/users', authenticateToken, requireSystemAdmin, async (req: Request,
   }
 });
 
+// GET /api/admin/children - Get all child profiles with parent info (system_admin only)
+router.get('/children', authenticateToken, requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    const parentUsers = schema.users;
+    const rows = await db.select({
+      id: schema.students.id,
+      name: schema.students.name,
+      gradeLevel: schema.students.gradeLevel,
+      targetExam: schema.students.targetExam,
+      age: schema.students.age,
+      createdAt: schema.students.createdAt,
+      parentId: schema.students.parentId,
+      parentName: parentUsers.fullName,
+      parentEmail: parentUsers.email,
+    })
+    .from(schema.students)
+    .leftJoin(parentUsers, eq(parentUsers.id, schema.students.parentId))
+    .orderBy(parentUsers.fullName, schema.students.name);
+
+    res.json({ success: true, children: rows });
+  } catch (error) {
+    console.error('Get children error:', error);
+    res.status(500).json({ error: 'Failed to fetch child profiles' });
+  }
+});
+
+// GET /api/admin/school-children/:schoolId - Get child profiles for a school
+router.get('/school-children/:schoolId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const schoolId = parseInt(req.params.schoolId, 10);
+    if (isNaN(schoolId)) {
+      return res.status(400).json({ error: 'Invalid school ID' });
+    }
+
+    const parentUsers = schema.users;
+    const rows = await db.select({
+      id: schema.students.id,
+      name: schema.students.name,
+      gradeLevel: schema.students.gradeLevel,
+      targetExam: schema.students.targetExam,
+      age: schema.students.age,
+      createdAt: schema.students.createdAt,
+      parentId: schema.students.parentId,
+      parentName: parentUsers.fullName,
+      parentEmail: parentUsers.email,
+    })
+    .from(schema.students)
+    .innerJoin(schema.studentSchools, and(
+      eq(schema.studentSchools.studentId, schema.students.id),
+      eq(schema.studentSchools.schoolId, schoolId),
+      eq(schema.studentSchools.isActive, true),
+    ))
+    .leftJoin(parentUsers, eq(parentUsers.id, schema.students.parentId))
+    .orderBy(parentUsers.fullName, schema.students.name);
+
+    res.json({ success: true, children: rows });
+  } catch (error) {
+    console.error('Get school children error:', error);
+    res.status(500).json({ error: 'Failed to fetch school child profiles' });
+  }
+});
+
 // GET /api/admin/current-user - Get current authenticated user info
 router.get('/current-user', authenticateToken, async (req: Request, res: Response) => {
   try {

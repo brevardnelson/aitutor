@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRBAC } from '@/contexts/RBACContext';
-import { rbacAuthAPI, AdminUser } from '@/lib/rbac-auth-api';
+import { rbacAuthAPI, AdminUser, AdminChild } from '@/lib/rbac-auth-api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Users, Mail, GraduationCap, User, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Users, GraduationCap, User, Loader2, AlertCircle, Baby } from 'lucide-react';
 import type { UserRole } from '@/types/auth';
 
 const ROLE_COLORS: Record<string, string> = {
@@ -26,6 +26,97 @@ const ROLE_COLORS: Record<string, string> = {
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+const GRADE_LABELS: Record<string, string> = {
+  'infant-1': 'Infant 1', 'infant-2': 'Infant 2',
+  'standard-1': 'Standard 1', 'standard-2': 'Standard 2', 'standard-3': 'Standard 3',
+  'standard-4': 'Standard 4', 'standard-5': 'Standard 5',
+  'form-1': 'Form 1', 'form-2': 'Form 2', 'form-3': 'Form 3',
+  'form-4': 'Form 4', 'form-5': 'Form 5', 'form-6': 'Form 6',
+  'k': 'Kindergarten', 'grade-1': 'Grade 1', 'grade-2': 'Grade 2', 'grade-3': 'Grade 3',
+  'grade-4': 'Grade 4', 'grade-5': 'Grade 5', 'grade-6': 'Grade 6',
+  'grade-7': 'Grade 7', 'grade-8': 'Grade 8', 'grade-9': 'Grade 9',
+  'grade-10': 'Grade 10', 'grade-11': 'Grade 11', 'grade-12': 'Grade 12',
+};
+
+const EXAM_LABELS: Record<string, string> = {
+  'sea': 'SEA', 'csec': 'CSEC', 'cape': 'CAPE',
+  'high-school-entrance': 'HS Entrance', 'common-entrance': 'Common Entrance',
+  'none': 'None',
+};
+
+function gradeLabel(g: string | null) {
+  if (!g) return null;
+  return GRADE_LABELS[g] ?? g;
+}
+
+function examLabel(e: string | null) {
+  if (!e) return null;
+  return EXAM_LABELS[e] ?? e;
+}
+
+function ChildRow({ child }: { child: AdminChild }) {
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="h-9 w-9 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+          <span className="text-orange-700 font-semibold text-sm">
+            {child.name.charAt(0).toUpperCase()}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-gray-900">{child.name}</p>
+            {gradeLabel(child.gradeLevel) && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {gradeLabel(child.gradeLevel)}
+              </span>
+            )}
+            {examLabel(child.targetExam) && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                {examLabel(child.targetExam)}
+              </span>
+            )}
+            {child.age && (
+              <span className="text-xs text-gray-400">Age {child.age}</span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 truncate mt-0.5">
+            Parent: {child.parentName ?? 'Unknown'}{child.parentEmail ? ` (${child.parentEmail})` : ''}
+          </p>
+        </div>
+      </div>
+      <span className="text-xs text-gray-400 hidden sm:block flex-shrink-0 ml-3">{formatDate(child.createdAt)}</span>
+    </div>
+  );
+}
+
+function ChildList({ children, schoolName }: { children: AdminChild[]; schoolName: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Baby className="h-5 w-5" />
+          Child Profiles
+          <Badge variant="secondary" className="ml-1">{children.length}</Badge>
+        </CardTitle>
+        <CardDescription>Children registered by parents in {schoolName}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {children.length === 0 ? (
+          <div className="text-center py-8">
+            <Baby className="mx-auto h-10 w-10 text-gray-300" />
+            <p className="mt-2 text-sm text-gray-500">No child profiles yet</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {children.map(c => <ChildRow key={c.id} child={c} />)}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -116,6 +207,7 @@ function UserList({
 export const UserManagement: React.FC = () => {
   const { currentSchool, inviteUser, hasRole } = useRBAC();
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [children, setChildren] = useState<AdminChild[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -137,21 +229,32 @@ export const UserManagement: React.FC = () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      let result;
+      let userResult;
+      let childResult;
       if (isSystemAdmin) {
-        result = await rbacAuthAPI.getUsers();
+        [userResult, childResult] = await Promise.all([
+          rbacAuthAPI.getUsers(),
+          rbacAuthAPI.getChildren(),
+        ]);
       } else if (isSchoolAdmin && currentSchool?.id) {
-        result = await rbacAuthAPI.getSchoolUsers(currentSchool.id);
+        [userResult, childResult] = await Promise.all([
+          rbacAuthAPI.getSchoolUsers(currentSchool.id),
+          rbacAuthAPI.getSchoolChildren(currentSchool.id),
+        ]);
       } else {
         setFetchError('No school selected or insufficient permissions');
         setIsLoading(false);
         return;
       }
 
-      if (result.success && result.users) {
-        setUsers(result.users);
+      if (userResult.success && userResult.users) {
+        setUsers(userResult.users);
       } else {
-        setFetchError(result.error || 'Failed to load users');
+        setFetchError(userResult.error || 'Failed to load users');
+      }
+
+      if (childResult.success && childResult.children) {
+        setChildren(childResult.children);
       }
     } catch {
       setFetchError('Unexpected error loading users');
@@ -311,7 +414,7 @@ export const UserManagement: React.FC = () => {
         </Alert>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="all" className="flex items-center gap-1">
               <Users className="h-4 w-4" />
               All
@@ -327,6 +430,10 @@ export const UserManagement: React.FC = () => {
             <TabsTrigger value="students" className="flex items-center gap-1">
               <Users className="h-4 w-4" />
               Students
+            </TabsTrigger>
+            <TabsTrigger value="children" className="flex items-center gap-1">
+              <Baby className="h-4 w-4" />
+              Children
             </TabsTrigger>
           </TabsList>
 
@@ -372,6 +479,10 @@ export const UserManagement: React.FC = () => {
               schoolName={schoolName}
               onInvite={() => { setInviteData(prev => ({ ...prev, role: 'student' })); setIsInviteDialogOpen(true); }}
             />
+          </TabsContent>
+
+          <TabsContent value="children">
+            <ChildList children={children} schoolName={schoolName} />
           </TabsContent>
         </Tabs>
       )}
