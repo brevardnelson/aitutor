@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bot, User, Lightbulb, CheckCircle, XCircle, AlertCircle, RefreshCw, Cpu, PenTool, Keyboard } from 'lucide-react';
+import { Bot, User, Lightbulb, CheckCircle, XCircle, AlertCircle, RefreshCw, Cpu, PenTool, Keyboard, BookOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StepValidator, StepValidationResult } from '@/lib/stepValidator';
 import { guidedTutorContent, TopicKey, getRandomQuestion } from './GuidedTutorContent';
@@ -246,6 +246,41 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
     const idx = Math.min(hintIndex, hints.length - 1);
     setHintIndex(prev => prev + 1);
     return hints[idx];
+  };
+
+  const handleSolve = async () => {
+    const workings = currentQuestion.steps?.map((step: string, i: number) => `${i + 1}. ${step}`).join('\n') || 'Work through each step carefully.';
+    const solveMessage: Message = {
+      id: Date.now().toString(),
+      type: 'ai',
+      content: `📖 Solution\n\n✅ Correct Answer: ${currentQuestion.correctAnswer}\n\nWorkings:\n${workings}\n\nStudy this carefully, then try a new question!`,
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, solveMessage]);
+    setIsComplete(true);
+
+    if (sessionStarted) {
+      try {
+        await learningTracker.recordProblemAttempt(
+          LearningTracker.getCurrentStudentId(),
+          subject,
+          topic,
+          {
+            problemId: `${topic}-solved-${Date.now()}`,
+            difficulty: LearningTracker.determineDifficulty(topic, currentQuestion.problem || ''),
+            attempts: attempts,
+            hintsUsed: hintsUsed,
+            timeSpent: learningTracker.getProblemTimeSpent(),
+            isCorrect: false,
+            isCompleted: true,
+            needsAIIntervention: true,
+            skippedToFinalHint: true
+          }
+        );
+      } catch (error) {
+        console.error('Failed to record solved problem:', error);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent, textOverride?: string) => {
@@ -501,25 +536,39 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
         </div>
         
         <div className="space-y-2">
-          <Button 
-            onClick={() => {
-              setHintsUsed(prev => prev + 1);
-              setTotalHintsUsed(prev => prev + 1);
-              const hint: Message = {
-                id: Date.now().toString(),
-                type: 'ai',
-                content: `Hint: ${getNextHint()}`,
-                timestamp: new Date()
-              };
-              setMessages(prev => [...prev, hint]);
-            }}
-            variant="outline"
-            size="sm"
-            className="w-full"
-            disabled={isComplete || isValidating}
-          >
-            <Lightbulb className="h-4 w-4 mr-2" />Get Hint
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => {
+                setHintsUsed(prev => prev + 1);
+                setTotalHintsUsed(prev => prev + 1);
+                const hint: Message = {
+                  id: Date.now().toString(),
+                  type: 'ai',
+                  content: `Hint ${hintsUsed + 1}: ${getNextHint()}`,
+                  timestamp: new Date()
+                };
+                setMessages(prev => [...prev, hint]);
+              }}
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              disabled={isComplete || isValidating || hintsUsed >= 3}
+            >
+              <Lightbulb className="h-4 w-4 mr-2" />
+              {hintsUsed >= 3 ? 'No more hints' : `Get Hint (${hintsUsed}/3)`}
+            </Button>
+            {hintsUsed >= 3 && !isComplete && (
+              <Button
+                onClick={handleSolve}
+                variant="destructive"
+                size="sm"
+                className="flex-1"
+                disabled={isValidating}
+              >
+                <BookOpen className="h-4 w-4 mr-2" />Show Solution
+              </Button>
+            )}
+          </div>
           
           {useHandwriting ? (
             <div className="space-y-2">

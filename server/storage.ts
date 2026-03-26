@@ -181,7 +181,7 @@ export class DashboardStorage {
     
     if (updates.endTime !== undefined) {
       setClause.push('end_time = $' + (values.length + 1));
-      values.push(updates.endTime);
+      values.push(updates.endTime instanceof Date ? updates.endTime.toISOString() : updates.endTime);
     }
     if (updates.duration !== undefined) {
       setClause.push('duration = $' + (values.length + 1));
