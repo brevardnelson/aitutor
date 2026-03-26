@@ -10,12 +10,19 @@ import { type Subject } from '@/lib/ai-service';
 interface ProblemSolverProps {
   topic: string;
   subject?: Subject;
-  onQuestionChange?: (question: string) => void;
+  onQuestionChange?: (question: string | null) => void;
 }
 
 const ProblemSolver: React.FC<ProblemSolverProps> = ({ topic, subject = 'math', onQuestionChange }) => {
   const [activeTab, setActiveTab] = useState('guided');
   const [key, setKey] = useState(0);
+
+  const handleTabChange = (tab: string) => {
+    if (tab !== 'guided' && onQuestionChange) {
+      onQuestionChange(null);
+    }
+    setActiveTab(tab);
+  };
 
   const handleReset = () => {
     setKey(prev => prev + 1);
@@ -39,7 +46,7 @@ const ProblemSolver: React.FC<ProblemSolverProps> = ({ topic, subject = 'math', 
         </CardHeader>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="guided" className="flex items-center gap-2">
             <BookOpen className="h-4 w-4" />

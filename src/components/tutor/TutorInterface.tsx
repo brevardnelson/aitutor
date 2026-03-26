@@ -140,7 +140,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
             {viewMode !== 'topics' && (
               <Button 
                 variant="outline" 
-                onClick={() => setViewMode('topics')}
+                onClick={() => { setViewMode('topics'); setCurrentQuestion(null); }}
                 className="flex items-center gap-2"
               >
                 <ArrowLeft className="h-4 w-4" />

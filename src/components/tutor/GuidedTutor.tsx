@@ -27,7 +27,7 @@ interface GuidedTutorProps {
   subject?: Subject;
   onComplete: () => void;
   onReset?: () => void;
-  onQuestionChange?: (question: string) => void;
+  onQuestionChange?: (question: string | null) => void;
 }
 
 const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onComplete, onReset, onQuestionChange }) => {
@@ -64,6 +64,13 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
       onQuestionChange(currentQuestion.problem);
     }
   }, [currentQuestion, onQuestionChange]);
+
+  // Clear question context when this component unmounts
+  React.useEffect(() => {
+    return () => {
+      if (onQuestionChange) onQuestionChange(null);
+    };
+  }, [onQuestionChange]);
 
   // Session-wide aggregate counters for proper endSession tracking
   const [problemsAttempted, setProblemsAttempted] = useState(0);
