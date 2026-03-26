@@ -209,7 +209,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
       </div>
 
       {/* Floating Talk to Tutor button */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3 overflow-visible">
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3 overflow-visible max-h-screen">
         {voiceChatOpen && (
           <VoiceChat
             topic={selectedTopic ?? undefined}
