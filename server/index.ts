@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
@@ -37,6 +38,7 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '5mb' }));
 
 // Authentication routes

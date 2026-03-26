@@ -21,7 +21,12 @@ export const authenticateToken = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    // Fallback: accept the cookie used by the main app login flow
+    if (!token && req.cookies?.['caribbeanAI_token']) {
+      token = req.cookies['caribbeanAI_token'];
+    }
 
     if (!token) {
       res.status(401).json({ error: 'Access token required' });
