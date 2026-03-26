@@ -2,7 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Mic, MicOff, X, Volume2, VolumeX, Bot, User, MessageCircle } from 'lucide-react';
+import {
+  Mic, MicOff, X, Volume2, VolumeX, Bot, User,
+  MessageCircle, Settings, Check, Play,
+} from 'lucide-react';
+
+const VOICE_KEY = 'caribbeanAI_tutor_voice';
+const PREVIEW_TEXT = "Hi there! I'm your AI tutor. How can I help you today?";
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -34,10 +40,21 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
   const [isSupported, setIsSupported] = useState(true);
   const [interimText, setInterimText] = useState('');
 
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
+    return localStorage.getItem(VOICE_KEY) ?? '';
+  });
+  const [previewingVoice, setPreviewingVoice] = useState<string>('');
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const selectedVoiceRef = useRef(selectedVoiceName);
+
+  useEffect(() => {
+    selectedVoiceRef.current = selectedVoiceName;
+  }, [selectedVoiceName]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -57,7 +74,47 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     }
   }, [messages, interimText]);
 
-  const speak = useCallback((text: string) => {
+  const loadVoices = useCallback(() => {
+    if (!window.speechSynthesis) return;
+    const all = window.speechSynthesis.getVoices();
+    const english = all.filter(v => v.lang.startsWith('en'));
+    if (english.length > 0) {
+      setAvailableVoices(english);
+      setSelectedVoiceName(prev => {
+        const saved = localStorage.getItem(VOICE_KEY) ?? '';
+        if (saved && english.some(v => v.name === saved)) return saved;
+        if (prev && english.some(v => v.name === prev)) return prev;
+        const fallback = english[0].name;
+        if (!saved) localStorage.setItem(VOICE_KEY, fallback);
+        return fallback;
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    loadVoices();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, [loadVoices]);
+
+  const resolveVoice = useCallback((): SpeechSynthesisVoice | null => {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices();
+    const name = selectedVoiceRef.current;
+    if (name) {
+      const match = voices.find(v => v.name === name);
+      if (match) return match;
+    }
+    return voices.find(v => v.lang.startsWith('en')) ?? null;
+  }, []);
+
+  const speak = useCallback((text: string, overrideVoiceName?: string) => {
     if (isMuted || !window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
@@ -66,9 +123,14 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     utterance.pitch = 1;
     utterance.volume = 1;
 
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => v.lang.startsWith('en') && !v.name.includes('Google'));
-    if (preferred) utterance.voice = preferred;
+    if (overrideVoiceName) {
+      const voices = window.speechSynthesis.getVoices();
+      const match = voices.find(v => v.name === overrideVoiceName);
+      if (match) utterance.voice = match;
+    } else {
+      const voice = resolveVoice();
+      if (voice) utterance.voice = voice;
+    }
 
     utterance.onstart = () => {
       setIsSpeaking(true);
@@ -76,23 +138,24 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     };
     utterance.onend = () => {
       setIsSpeaking(false);
+      setPreviewingVoice('');
       setStatusText('Tap the mic to respond');
-      synthRef.current = null;
     };
     utterance.onerror = () => {
       setIsSpeaking(false);
+      setPreviewingVoice('');
       setStatusText('Tap the mic to respond');
     };
 
-    synthRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [isMuted]);
+  }, [isMuted, resolveVoice]);
 
   const stopSpeaking = useCallback(() => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
+    setPreviewingVoice('');
   }, []);
 
   const sendMessage = useCallback(async (userText: string) => {
@@ -128,7 +191,10 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
     } catch {
       setIsThinking(false);
       setStatusText('Connection error — tap mic to try again');
-      const errMsg: ChatMessage = { role: 'assistant', content: "Sorry, I had trouble connecting. Please try again." };
+      const errMsg: ChatMessage = {
+        role: 'assistant',
+        content: 'Sorry, I had trouble connecting. Please try again.',
+      };
       setMessages(prev => [...prev, errMsg]);
     }
   }, [topic, subject, gradeLevel, targetExam, speak]);
@@ -177,7 +243,6 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        console.error('Speech recognition error:', event.error);
         setStatusText('Could not hear you — tap mic to try again');
       }
       setIsListening(false);
@@ -206,20 +271,33 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
   }, [isListening, isThinking, startListening, stopListening]);
 
   const handleMuteToggle = useCallback(() => {
-    if (!isMuted) {
-      stopSpeaking();
-    }
+    if (!isMuted) stopSpeaking();
     setIsMuted(prev => !prev);
   }, [isMuted, stopSpeaking]);
+
+  const handleSelectVoice = useCallback((name: string) => {
+    setSelectedVoiceName(name);
+    localStorage.setItem(VOICE_KEY, name);
+  }, []);
+
+  const handlePreviewVoice = useCallback((name: string) => {
+    stopSpeaking();
+    setPreviewingVoice(name);
+    speak(PREVIEW_TEXT, name);
+  }, [speak, stopSpeaking]);
+
+  const handleOpenVoicePicker = useCallback(() => {
+    stopSpeaking();
+    stopListening();
+    setShowVoicePicker(true);
+  }, [stopSpeaking, stopListening]);
 
   useEffect(() => {
     if (messages.length === 0) {
       const greeting = topic
         ? `Hi there! I'm your AI tutor. I see you're working on ${topic}. What would you like help with?`
         : `Hi there! I'm your AI tutor. What would you like to work on today?`;
-
-      const greetMsg: ChatMessage = { role: 'assistant', content: greeting };
-      setMessages([greetMsg]);
+      setMessages([{ role: 'assistant', content: greeting }]);
       setTimeout(() => speak(greeting), 500);
     }
   }, []);
@@ -232,8 +310,11 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
   }, [stopListening, stopSpeaking]);
 
   return (
-    <Card className="flex flex-col shadow-2xl border-2 border-blue-200 bg-white overflow-hidden"
-      style={{ height: '520px', width: '360px' }}>
+    <Card
+      className="flex flex-col shadow-2xl border-2 border-blue-200 bg-white overflow-hidden"
+      style={{ height: '520px', width: '360px' }}
+    >
+      {/* ── Header ── */}
       <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -242,10 +323,23 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
             </div>
             <div>
               <p className="font-semibold text-sm leading-none">AI Tutor</p>
-              {topic && <p className="text-xs text-blue-100 mt-0.5 truncate max-w-[180px]">{topic}</p>}
+              {showVoicePicker
+                ? <p className="text-xs text-blue-100 mt-0.5">Choose a voice</p>
+                : topic && <p className="text-xs text-blue-100 mt-0.5 truncate max-w-[160px]">{topic}</p>
+              }
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={showVoicePicker ? () => setShowVoicePicker(false) : handleOpenVoicePicker}
+              className={`h-7 w-7 text-white hover:bg-white/20 ${showVoicePicker ? 'bg-white/25' : ''}`}
+              title="Change tutor voice"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -270,94 +364,174 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
       </CardHeader>
 
       <CardContent className="flex flex-col flex-1 p-0 overflow-hidden">
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto p-3 space-y-3"
-        >
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'assistant' && (
-                <div className="bg-blue-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
-                  <Bot className="h-3.5 w-3.5 text-white" />
+        {showVoicePicker ? (
+          /* ── Voice Picker Panel ── */
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
+              {availableVoices.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-sm text-gray-500 px-6 text-center">
+                  No voices found. Try opening this in Chrome or Safari.
                 </div>
-              )}
-              <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-tr-sm'
-                  : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-              }`}>
-                {msg.content}
-              </div>
-              {msg.role === 'user' && (
-                <div className="bg-purple-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
-                  <User className="h-3.5 w-3.5 text-white" />
-                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {availableVoices.map(voice => {
+                    const isSelected = voice.name === selectedVoiceName;
+                    const isPreviewing = voice.name === previewingVoice;
+                    return (
+                      <li key={voice.name}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectVoice(voice.name)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50 ${
+                            isSelected ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-500'
+                              : 'border-gray-300'
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
+                              {voice.name}
+                            </p>
+                            <p className="text-xs text-gray-400">{voice.lang}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (isPreviewing) {
+                                stopSpeaking();
+                              } else {
+                                handlePreviewVoice(voice.name);
+                              }
+                            }}
+                            className={`shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              isPreviewing
+                                ? 'border-purple-300 bg-purple-100 text-purple-700'
+                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-500 hover:text-blue-600'
+                            }`}
+                            title={isPreviewing ? 'Stop preview' : 'Preview this voice'}
+                          >
+                            <Play className="h-3 w-3" />
+                            {isPreviewing ? 'Stop' : 'Try'}
+                          </button>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
-          ))}
-
-          {interimText && (
-            <div className="flex gap-2 justify-end">
-              <div className="max-w-[78%] rounded-2xl rounded-tr-sm px-3 py-2 text-sm bg-blue-100 text-blue-600 italic border border-blue-200">
-                {interimText}...
-              </div>
-              <div className="bg-purple-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
-                <User className="h-3.5 w-3.5 text-white" />
-              </div>
-            </div>
-          )}
-
-          {isThinking && (
-            <div className="flex gap-2 justify-start">
-              <div className="bg-blue-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
-                <Bot className="h-3.5 w-3.5 text-white" />
-              </div>
-              <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2">
-                <div className="flex gap-1 items-center h-4">
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="shrink-0 p-4 border-t bg-gray-50">
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-gray-500 text-center">{statusText}</p>
-            <div className="flex items-center gap-3">
-              {isSpeaking && (
-                <Badge variant="secondary" className="text-xs animate-pulse bg-purple-100 text-purple-700">
-                  <Volume2 className="h-3 w-3 mr-1" />Speaking
-                </Badge>
-              )}
-              <button
-                onClick={handleMicClick}
-                disabled={!isSupported || isThinking}
-                title={isListening ? 'Stop listening' : 'Start talking'}
-                className={`relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus:ring-4 ${
-                  isListening
-                    ? 'h-16 w-16 bg-red-500 hover:bg-red-600 focus:ring-red-300 shadow-lg shadow-red-200'
-                    : isThinking
-                    ? 'h-16 w-16 bg-gray-300 cursor-not-allowed'
-                    : 'h-16 w-16 bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 focus:ring-blue-300 shadow-lg shadow-blue-200 hover:scale-105'
-                }`}
+            <div className="shrink-0 p-3 border-t bg-gray-50">
+              <Button
+                type="button"
+                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                onClick={() => { stopSpeaking(); setShowVoicePicker(false); }}
               >
-                {isListening && (
-                  <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-60" />
-                )}
-                {isListening
-                  ? <MicOff className="h-7 w-7 text-white relative z-10" />
-                  : <Mic className="h-7 w-7 text-white relative z-10" />
-                }
-              </button>
+                Done — use {selectedVoiceName ? selectedVoiceName.split(' ')[0] : 'this voice'}
+              </Button>
             </div>
-            {!isSupported && (
-              <p className="text-xs text-red-500 text-center">Voice not supported. Try Chrome or Safari.</p>
-            )}
           </div>
-        </div>
+        ) : (
+          /* ── Chat Panel ── */
+          <>
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="bg-blue-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
+                      <Bot className="h-3.5 w-3.5 text-white" />
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-tr-sm'
+                      : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                  }`}>
+                    {msg.content}
+                  </div>
+                  {msg.role === 'user' && (
+                    <div className="bg-purple-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
+                      <User className="h-3.5 w-3.5 text-white" />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {interimText && (
+                <div className="flex gap-2 justify-end">
+                  <div className="max-w-[78%] rounded-2xl rounded-tr-sm px-3 py-2 text-sm bg-blue-100 text-blue-600 italic border border-blue-200">
+                    {interimText}...
+                  </div>
+                  <div className="bg-purple-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
+                    <User className="h-3.5 w-3.5 text-white" />
+                  </div>
+                </div>
+              )}
+
+              {isThinking && (
+                <div className="flex gap-2 justify-start">
+                  <div className="bg-blue-500 rounded-full p-1.5 h-7 w-7 shrink-0 flex items-center justify-center mt-0.5">
+                    <Bot className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2">
+                    <div className="flex gap-1 items-center h-4">
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 p-4 border-t bg-gray-50">
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-gray-500 text-center">{statusText}</p>
+                <div className="flex items-center gap-3">
+                  {isSpeaking && (
+                    <Badge variant="secondary" className="text-xs animate-pulse bg-purple-100 text-purple-700">
+                      <Volume2 className="h-3 w-3 mr-1" />Speaking
+                    </Badge>
+                  )}
+                  <button
+                    onClick={handleMicClick}
+                    disabled={!isSupported || isThinking}
+                    title={isListening ? 'Stop listening' : 'Start talking'}
+                    className={`relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus:ring-4 ${
+                      isListening
+                        ? 'h-16 w-16 bg-red-500 hover:bg-red-600 focus:ring-red-300 shadow-lg shadow-red-200'
+                        : isThinking
+                        ? 'h-16 w-16 bg-gray-300 cursor-not-allowed'
+                        : 'h-16 w-16 bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 focus:ring-blue-300 shadow-lg shadow-blue-200 hover:scale-105'
+                    }`}
+                  >
+                    {isListening && (
+                      <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-60" />
+                    )}
+                    {isListening
+                      ? <MicOff className="h-7 w-7 text-white relative z-10" />
+                      : <Mic className="h-7 w-7 text-white relative z-10" />
+                    }
+                  </button>
+                </div>
+                {!isSupported && (
+                  <p className="text-xs text-red-500 text-center">Voice not supported. Try Chrome or Safari.</p>
+                )}
+                {selectedVoiceName && !isListening && !isThinking && !isSpeaking && (
+                  <p className="text-xs text-gray-400">
+                    Voice: {selectedVoiceName.split(' ')[0]}
+                    {selectedVoiceName.split(' ').length > 1 ? ' ' + selectedVoiceName.split(' ').slice(1).join(' ') : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
