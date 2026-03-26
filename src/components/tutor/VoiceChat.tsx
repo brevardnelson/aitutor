@@ -93,12 +93,13 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
 
   useEffect(() => {
     loadVoices();
-    if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
+    const synth = window.speechSynthesis;
+    if (synth) {
+      synth.addEventListener('voiceschanged', loadVoices);
     }
     return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.onvoiceschanged = null;
+      if (synth) {
+        synth.removeEventListener('voiceschanged', loadVoices);
       }
     };
   }, [loadVoices]);
@@ -333,7 +334,7 @@ const VoiceChat = ({ topic, subject = 'math', gradeLevel, targetExam, onClose }:
               type="button"
               variant="ghost"
               size="icon"
-              onClick={showVoicePicker ? () => setShowVoicePicker(false) : handleOpenVoicePicker}
+              onClick={showVoicePicker ? () => { stopSpeaking(); setShowVoicePicker(false); } : handleOpenVoicePicker}
               className={`h-7 w-7 text-white hover:bg-white/20 ${showVoicePicker ? 'bg-white/25' : ''}`}
               title="Change tutor voice"
             >
