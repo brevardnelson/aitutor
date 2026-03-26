@@ -55,16 +55,34 @@ export class RBACAuthAPI {
   }
 
   // Helper method to get auth headers
-  private getAuthHeaders(): HeadersInit {
-    const headers: HeadersInit = {
+  // Prefers the RBAC admin token; falls back to the main app token so that
+  // users who sign in via the regular login form can still hit admin endpoints.
+  private getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    const token = this.token
+      || localStorage.getItem('caribbeanAI_auth_token')
+      || localStorage.getItem('caribbeanAI_token');
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     
     return headers;
+  }
+
+  // Fetch helper that always sends credentials (cookies) and Bearer token
+  private authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    return fetch(url, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        ...this.getAuthHeaders(),
+        ...(options.headers as Record<string, string> || {}),
+      },
+    });
   }
 
   // Convert backend user response to frontend AuthUser type
@@ -88,11 +106,8 @@ export class RBACAuthAPI {
     token?: string;
   }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/signin`, {
+      const response = await this.authFetch(`${API_BASE_URL}/auth/signin`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ email, password }),
       });
 
@@ -140,9 +155,8 @@ export class RBACAuthAPI {
   async signOut(): Promise<void> {
     try {
       if (this.token) {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
+        await this.authFetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
-          headers: this.getAuthHeaders(),
         });
       }
     } catch (error) {
@@ -161,9 +175,7 @@ export class RBACAuthAPI {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: this.getAuthHeaders(),
-      });
+      const response = await this.authFetch(`${API_BASE_URL}/auth/me`);
 
       if (!response.ok) {
         // Token might be expired
@@ -187,9 +199,7 @@ export class RBACAuthAPI {
   // Admin operations
   async getSystemStats(): Promise<APIStatsResult> {
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/system-stats`, {
-        headers: this.getAuthHeaders(),
-      });
+      const response = await this.authFetch(`${API_BASE_URL}/admin/system-stats`);
 
       if (!response.ok) {
         return {
@@ -211,9 +221,7 @@ export class RBACAuthAPI {
 
   async getSchools(): Promise<APISchoolsResult> {
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/schools`, {
-        headers: this.getAuthHeaders(),
-      });
+      const response = await this.authFetch(`${API_BASE_URL}/admin/schools`);
 
       if (!response.ok) {
         return {
@@ -240,9 +248,8 @@ export class RBACAuthAPI {
     email?: string;
   }): Promise<APISchoolResult> {
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/schools`, {
+      const response = await this.authFetch(`${API_BASE_URL}/admin/schools`, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
         body: JSON.stringify(schoolData),
       });
 
@@ -270,9 +277,7 @@ export class RBACAuthAPI {
 
   async getUsers(): Promise<{ success: boolean; users?: AdminUser[]; error?: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
-        headers: this.getAuthHeaders(),
-      });
+      const response = await this.authFetch(`${API_BASE_URL}/admin/users`);
       const data = await response.json();
       if (!response.ok || !data.success) {
         return { success: false, error: data.error || 'Failed to fetch users' };
@@ -285,9 +290,7 @@ export class RBACAuthAPI {
 
   async getSchoolUsers(schoolId: number): Promise<{ success: boolean; users?: AdminUser[]; error?: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/school-users/${schoolId}`, {
-        headers: this.getAuthHeaders(),
-      });
+      const response = await this.authFetch(`${API_BASE_URL}/admin/school-users/${schoolId}`);
       const data = await response.json();
       if (!response.ok || !data.success) {
         return { success: false, error: data.error || 'Failed to fetch school users' };
@@ -304,9 +307,8 @@ export class RBACAuthAPI {
     schoolId?: number;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/invite`, {
+      const response = await this.authFetch(`${API_BASE_URL}/auth/invite`, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
         body: JSON.stringify(userData),
       });
 
