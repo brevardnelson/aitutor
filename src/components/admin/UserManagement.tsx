@@ -78,7 +78,7 @@ function ChildRow({ child }: { child: AdminChild }) {
                 {examLabel(child.targetExam)}
               </span>
             )}
-            {child.age && (
+            {child.age !== null && child.age !== undefined && (
               <span className="text-xs text-gray-400">Age {child.age}</span>
             )}
           </div>
