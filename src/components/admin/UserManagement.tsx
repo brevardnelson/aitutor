@@ -38,7 +38,9 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 function UserRow({ user }: { user: AdminUser }) {
-  const activeRoles = user.roles.filter(r => r.isActive);
+  const activeRoles = user.roles
+    .filter(r => r.isActive)
+    .filter((r, i, arr) => arr.findIndex(x => x.role === r.role) === i);
   return (
     <div className="flex items-center justify-between p-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -131,35 +133,34 @@ export const UserManagement: React.FC = () => {
   const isSystemAdmin = hasRole('system_admin');
   const isSchoolAdmin = hasRole('school_admin');
 
-  useEffect(() => {
-    async function loadUsers() {
-      setIsLoading(true);
-      setFetchError(null);
-      try {
-        let result;
-        if (isSystemAdmin) {
-          result = await rbacAuthAPI.getUsers();
-        } else if (isSchoolAdmin && currentSchool?.id) {
-          result = await rbacAuthAPI.getSchoolUsers(currentSchool.id);
-        } else {
-          setFetchError('No school selected or insufficient permissions');
-          setIsLoading(false);
-          return;
-        }
-
-        if (result.success && result.users) {
-          setUsers(result.users);
-        } else {
-          setFetchError(result.error || 'Failed to load users');
-        }
-      } catch {
-        setFetchError('Unexpected error loading users');
-      } finally {
+  const loadUsers = React.useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      let result;
+      if (isSystemAdmin) {
+        result = await rbacAuthAPI.getUsers();
+      } else if (isSchoolAdmin && currentSchool?.id) {
+        result = await rbacAuthAPI.getSchoolUsers(currentSchool.id);
+      } else {
+        setFetchError('No school selected or insufficient permissions');
         setIsLoading(false);
+        return;
       }
+
+      if (result.success && result.users) {
+        setUsers(result.users);
+      } else {
+        setFetchError(result.error || 'Failed to load users');
+      }
+    } catch {
+      setFetchError('Unexpected error loading users');
+    } finally {
+      setIsLoading(false);
     }
-    loadUsers();
   }, [isSystemAdmin, isSchoolAdmin, currentSchool?.id]);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,6 +177,7 @@ export const UserManagement: React.FC = () => {
         setInviteSuccess(`Invitation sent to ${inviteData.email} as ${inviteData.role.replace('_', ' ')}`);
         setInviteData({ email: '', role: 'teacher' });
         setIsInviteDialogOpen(false);
+        loadUsers();
       } else {
         setInviteError(result.error || 'Failed to send invitation');
       }
