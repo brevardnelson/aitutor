@@ -6,6 +6,20 @@ A comprehensive web-based AI tutoring platform supporting both US (K-13) and Car
 
 ## Recent Updates (March 2026)
 
+### Voice Chat AI Tutor ✅
+- "Talk to Tutor" floating button appears bottom-right in every learning session
+- Opens a chat panel where the student speaks directly to Claude via microphone
+- Conversation flows: student speaks → SpeechRecognition → Claude (POST /api/ai/voice-chat) → SpeechSynthesis reads reply aloud
+- Multi-turn conversation history kept per session; Claude uses short, spoken-style responses (1–3 sentences)
+- Claude receives current topic, grade level, and target exam for contextual tutoring
+- Mute button silences AI voice; interim transcription shown as student speaks
+- Works on Chrome/Safari desktop and mobile; hides mic gracefully if browser unsupported
+- Key files: `src/components/tutor/VoiceChat.tsx`, `server/index.ts` (POST /api/ai/voice-chat)
+
+### Voice Input for Answers ✅
+- Microphone button in the Guided Practice answer field (Task #13)
+- Uses browser SpeechRecognition, no external service
+
 ### Handwriting Input for Guided Practice ✅
 - Added HandwritingCanvas component with HTML5 Canvas + PointerEvents (stylus/mouse/touch)
 - Stroke-based drawing with pressure sensitivity, Undo, and Clear functionality

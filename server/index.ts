@@ -345,6 +345,56 @@ app.post('/api/ocr/handwriting',
   }
 );
 
+// Voice Chat AI endpoint
+app.post('/api/ai/voice-chat', async (req, res) => {
+  try {
+    const { messages, topic, subject, gradeLevel, targetExam } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'messages array is required' });
+    }
+
+    const gradeLevelInfo = gradeLevel
+      ? `\nStudent Grade Level: ${String(gradeLevel).replace(/-/g, ' ').toUpperCase()}`
+      : '';
+    const examInfo = targetExam
+      ? `\nTarget Exam: ${String(targetExam).split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+      : '';
+    const topicInfo = topic ? `\nCurrent Topic: ${topic}` : '';
+
+    const systemPrompt = `You are a friendly, encouraging Caribbean AI tutor having a spoken conversation with a student.${gradeLevelInfo}${examInfo}${topicInfo}
+
+You are speaking OUT LOUD, so keep your responses SHORT and CONVERSATIONAL — 1-3 sentences maximum. No bullet points, no markdown, no numbered lists. Speak naturally as if talking to the student face to face.
+
+Use the Socratic method: guide the student with questions rather than giving direct answers. Be warm, patient, and culturally relevant to Caribbean students. Reference local examples when helpful.
+
+If the student asks something off-topic, gently redirect them back to their studies.`;
+
+    const chatMessages = messages.map((m: { role: string; content: string }) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+
+    const response = await anthropicClient.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 300,
+      system: systemPrompt,
+      messages: chatMessages,
+    });
+
+    const reply =
+      response.content[0]?.type === 'text' ? response.content[0].text.trim() : "Sorry, I didn't catch that. Can you try again?";
+
+    res.json({ reply });
+  } catch (error: unknown) {
+    console.error('Voice chat error:', error);
+    res.status(500).json({
+      error: 'Voice chat failed',
+      message: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });

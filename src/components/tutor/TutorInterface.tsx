@@ -3,12 +3,13 @@ import { useAppContext } from '@/contexts/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, BookOpen, Brain, Target, ClipboardList, Settings, Cpu } from 'lucide-react';
+import { ArrowLeft, BookOpen, Brain, Target, ClipboardList, Settings, Cpu, MessageCircle } from 'lucide-react';
 import TopicSelector from './TopicSelector';
 import ProblemSolver from './ProblemSolver';
 import PracticeTestSelector from '../practice/PracticeTestSelector';
 import PracticeTest from '../practice/PracticeTest';
 import CurriculumUpload from '../admin/CurriculumUpload';
+import VoiceChat from './VoiceChat';
 import { aiService, type Subject } from '@/lib/ai-service';
 
 type ViewMode = 'topics' | 'problem' | 'practice-selector' | 'practice-test' | 'admin';
@@ -28,6 +29,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
   const [viewMode, setViewMode] = useState<ViewMode>('topics');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [testConfig, setTestConfig] = useState<TestConfig | null>(null);
+  const [voiceChatOpen, setVoiceChatOpen] = useState(false);
 
   // Get AI model info for this subject
   const modelInfo = aiService.getModelInfo(subject);
@@ -128,7 +130,7 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -204,6 +206,31 @@ const TutorInterface: React.FC<TutorInterfaceProps> = ({ subject = 'math' }) => 
             </CardContent>
           </Card>
         )}
+      </div>
+
+      {/* Floating Talk to Tutor button */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
+        {voiceChatOpen && (
+          <VoiceChat
+            topic={selectedTopic ?? undefined}
+            subject={subject}
+            gradeLevel={currentChild.gradeLevel}
+            targetExam={currentChild.targetExam}
+            onClose={() => setVoiceChatOpen(false)}
+          />
+        )}
+        <button
+          onClick={() => setVoiceChatOpen(prev => !prev)}
+          title={voiceChatOpen ? 'Close voice chat' : 'Talk to your AI Tutor'}
+          className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-xl font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-300 ${
+            voiceChatOpen
+              ? 'bg-gray-700 hover:bg-gray-800 text-white'
+              : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white hover:scale-105 shadow-blue-200'
+          }`}
+        >
+          <MessageCircle className="h-4 w-4" />
+          {voiceChatOpen ? 'Close Chat' : 'Talk to Tutor'}
+        </button>
       </div>
     </div>
   );
