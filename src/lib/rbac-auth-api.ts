@@ -24,6 +24,16 @@ interface APISchoolsResult {
   error?: string;
 }
 
+export interface AdminUser {
+  id: number;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+  roles: { role: string; isActive: boolean; assignedAt: string | null }[];
+}
+
 interface APIStatsResult {
   success: boolean;
   stats?: {
@@ -255,6 +265,36 @@ export class RBACAuthAPI {
         success: false,
         error: 'Network error',
       };
+    }
+  }
+
+  async getUsers(): Promise<{ success: boolean; users?: AdminUser[]; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+        headers: this.getAuthHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'Failed to fetch users' };
+      }
+      return { success: true, users: data.users };
+    } catch (error) {
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  async getSchoolUsers(schoolId: number): Promise<{ success: boolean; users?: AdminUser[]; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/school-users/${schoolId}`, {
+        headers: this.getAuthHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || 'Failed to fetch school users' };
+      }
+      return { success: true, users: data.users };
+    } catch (error) {
+      return { success: false, error: 'Network error' };
     }
   }
 

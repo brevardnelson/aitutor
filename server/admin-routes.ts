@@ -221,6 +221,7 @@ router.get('/school-users/:schoolId', authenticateToken, async (req: Request, re
       fullName: schema.users.fullName,
       phone: schema.users.phone,
       isActive: schema.users.isActive,
+      createdAt: schema.users.createdAt,
       role: schema.userRoles.role,
       permissions: schema.userRoles.permissions,
       roleIsActive: schema.userRoles.isActive,
@@ -244,6 +245,7 @@ router.get('/school-users/:schoolId', authenticateToken, async (req: Request, re
           fullName: row.fullName,
           phone: row.phone,
           isActive: row.isActive,
+          createdAt: row.createdAt,
           roles: [],
         });
       }
@@ -265,6 +267,62 @@ router.get('/school-users/:schoolId', authenticateToken, async (req: Request, re
   } catch (error) {
     console.error('Get school users error:', error);
     res.status(500).json({ error: 'Failed to fetch school users' });
+  }
+});
+
+// GET /api/admin/users - List all users (system admin only)
+router.get('/users', authenticateToken, requireSystemAdmin, async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const rows = await db.select({
+      userId: schema.users.id,
+      email: schema.users.email,
+      fullName: schema.users.fullName,
+      phone: schema.users.phone,
+      isActive: schema.users.isActive,
+      createdAt: schema.users.createdAt,
+      role: schema.userRoles.role,
+      roleIsActive: schema.userRoles.isActive,
+      assignedAt: schema.userRoles.assignedAt,
+    })
+    .from(schema.users)
+    .leftJoin(schema.userRoles, eq(schema.userRoles.userId, schema.users.id))
+    .where(eq(schema.users.isActive, true))
+    .orderBy(schema.users.createdAt);
+
+    const usersMap = new Map<number, {
+      id: number; email: string; fullName: string; phone: string | null;
+      isActive: boolean; createdAt: Date | null; roles: { role: string; isActive: boolean; assignedAt: Date | null }[];
+    }>();
+
+    rows.forEach(row => {
+      if (!usersMap.has(row.userId)) {
+        usersMap.set(row.userId, {
+          id: row.userId,
+          email: row.email,
+          fullName: row.fullName,
+          phone: row.phone,
+          isActive: row.isActive ?? true,
+          createdAt: row.createdAt,
+          roles: [],
+        });
+      }
+      if (row.role) {
+        usersMap.get(row.userId)!.roles.push({
+          role: row.role,
+          isActive: row.roleIsActive ?? true,
+          assignedAt: row.assignedAt,
+        });
+      }
+    });
+
+    res.json({ success: true, users: Array.from(usersMap.values()) });
+  } catch (error) {
+    console.error('Get all users error:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 

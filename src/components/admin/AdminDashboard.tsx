@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRBAC } from '@/contexts/RBACContext';
-import { RoleGuard, PermissionGuard } from '@/components/auth/RoleGuard';
-import { PERMISSIONS } from '@/types/auth';
+import { RoleGuard } from '@/components/auth/RoleGuard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -134,9 +133,9 @@ export const AdminDashboard: React.FC = () => {
 
           {/* Users Tab (System Admin, School Admin) */}
           <TabsContent value="users">
-            <PermissionGuard permissions={[PERMISSIONS.MANAGE_TEACHERS, PERMISSIONS.MANAGE_PARENTS, PERMISSIONS.MANAGE_STUDENTS]}>
+            <RoleGuard roles={['system_admin', 'school_admin']}>
               <UserManagement />
-            </PermissionGuard>
+            </RoleGuard>
           </TabsContent>
 
           {/* Curriculum & Documents Tab (System Admin, School Admin) */}
