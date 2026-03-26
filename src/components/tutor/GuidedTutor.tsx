@@ -10,6 +10,7 @@ import { aiService, type Subject, type TutoringRequest } from '@/lib/ai-service'
 import { learningTracker, LearningTracker } from '@/services/learning-tracker';
 import { useAppContext } from '@/contexts/AppContext';
 import HandwritingCanvas from './HandwritingCanvas';
+import VoiceInputButton from './VoiceInputButton';
 
 interface Message {
   id: string;
@@ -615,6 +616,10 @@ const GuidedTutor: React.FC<GuidedTutorProps> = ({ topic, subject = 'math', onCo
                   {isValidating ? 'Checking...' : 'Send'}
                 </Button>
               </form>
+              <VoiceInputButton
+                onTranscript={(text) => setUserInput(text)}
+                disabled={isComplete || isValidating}
+              />
               <Button
                 type="button"
                 variant="outline"
