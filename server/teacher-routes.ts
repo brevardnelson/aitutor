@@ -446,13 +446,13 @@ router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAb
     // Get all students in this class with their gamification data
     const studentsWithGamification = await db.select({
       studentId: schema.students.id,
-      studentName: sql<string>`COALESCE(${schema.studentProfiles.name}, 'Student ' || ${schema.students.id})`,
+      studentName: sql<string>`COALESCE(${schema.students.name}, ${schema.studentProfiles.name}, 'Student ' || ${schema.students.id})`,
       totalXP: sql<number>`COALESCE(${schema.studentXP.totalXP}, 0)`,
       currentLevel: sql<number>`COALESCE(${schema.studentXP.level}, 1)`,
       weeklyXP: sql<number>`COALESCE(${schema.studentXP.weeklyXP}, 0)`,
       badgeCount: sql<number>`COALESCE(badge_count.count, 0)`,
-      // Use real activity timestamp instead of createdAt
-      lastActive: sql<string>`COALESCE(activity_data.last_active, ${schema.students.createdAt})`,
+      // Use real activity date (text) instead of createdAt (cast timestamp to text for type match)
+      lastActive: sql<string>`COALESCE(activity_data.last_active, TO_CHAR(${schema.students.createdAt}, 'YYYY-MM-DD'))`,
       // Challenge data
       activeChallenges: sql<number>`COALESCE(challenge_stats.active_challenges, 0)`,
       completedChallenges: sql<number>`COALESCE(challenge_stats.completed_challenges, 0)`,
@@ -521,8 +521,14 @@ router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAb
     const totalStudents = studentsWithGamification.length;
     const averageXP = totalStudents > 0 ? 
       studentsWithGamification.reduce((sum, s) => sum + (s.totalXP || 0), 0) / totalStudents : 0;
-    const totalBadgesEarned = studentsWithGamification.reduce((sum, s) => sum + (s.badgeCount || 0), 0);
-    const activeStudents = studentsWithGamification.filter(s => s.weeklyXP > 0).length;
+    const totalBadgesEarned = studentsWithGamification.reduce((sum, s) => sum + Number(s.badgeCount || 0), 0);
+    // Use lastActive (from daily_activity) instead of weeklyXP, since weeklyXP
+    // resets to 0 on every new week. A student is "active" if they studied in the last 7 days.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const activeStudents = studentsWithGamification.filter(s => {
+      if (!s.lastActive) return false;
+      return new Date(s.lastActive) >= sevenDaysAgo;
+    }).length;
     const studentsInChallenges = studentsWithGamification.filter(s => s.activeChallenges > 0).length;
     const challengeParticipation = totalStudents > 0 ? (studentsInChallenges / totalStudents) * 100 : 0;
 
@@ -544,9 +550,9 @@ router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAb
         const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
         
-        // XP and engagement analysis
-        if ((s.weeklyXP || 0) < 50) {
-          reasons.push('Low weekly XP (less than 50 points)');
+        // XP and engagement analysis (weekly_xp resets each week so use totalXP + streak)
+        if ((s.totalXP || 0) < 100) {
+          reasons.push('Low overall XP (less than 100 points)');
         }
         if ((s.totalXP || 0) < 100 && new Date(s.lastActive) < weekAgo) {
           reasons.push('New student with low engagement');
@@ -618,7 +624,7 @@ router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAb
       leaderboardEntries = await db.select({
         rank: schema.leaderboardEntries.rank,
         studentId: schema.leaderboardEntries.studentId,
-        studentName: sql<string>`COALESCE(${schema.studentProfiles.name}, 'Unknown Student')`,
+        studentName: sql<string>`COALESCE(${schema.students.name}, ${schema.studentProfiles.name}, 'Unknown Student')`,
         currentValue: schema.leaderboardEntries.score,
         trendDirection: schema.leaderboardEntries.trendDirection
       })
@@ -692,7 +698,7 @@ router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAb
             xpToNextLevel: xpToNextLevel
           },
           badges: {
-            totalBadges: s.badgeCount || 0,
+            totalBadges: Number(s.badgeCount || 0),
             recentBadges: recentBadges.map(badge => ({
               id: badge.id,
               name: badge.name,
@@ -701,9 +707,9 @@ router.get('/class/:classId/gamification', authenticateToken, requireTeacherOrAb
             }))
           },
           challenges: {
-            weeklyProgress: Math.round(s.challengeProgress || 0),
-            completedChallenges: s.completedChallenges || 0,
-            currentStreak: s.currentStreak || 0
+            weeklyProgress: Math.round(Number(s.challengeProgress || 0)),
+            completedChallenges: Number(s.completedChallenges || 0),
+            currentStreak: Number(s.currentStreak || 0)
           },
           leaderboardPosition: {
             weeklyXPRank: leaderboardRank || 0,
