@@ -688,9 +688,9 @@ export const contentTemplates = pgTable('content_templates', {
 // GAMIFICATION SYSTEM - XP, Badges, Challenges, Leaderboards, Digital Wallet
 
 // Student XP tracking - points earned from completing problems and activities
+// NOTE: the real table uses student_id as the primary key (no separate id column).
 export const studentXP = pgTable('student_xp', {
-  id: serial('id').primaryKey(),
-  studentId: integer('student_id').references(() => students.id).notNull(),
+  studentId: integer('student_id').primaryKey().references(() => students.id).notNull(),
   totalXP: integer('total_xp').default(0), // Total XP earned across all activities
   spentXP: integer('spent_xp').default(0), // XP spent on rewards/redemptions
   availableXP: integer('available_xp').default(0), // Current balance for spending
@@ -700,10 +700,7 @@ export const studentXP = pgTable('student_xp', {
   lastXPEarned: timestamp('last_xp_earned'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => ({
-  // Unique XP tracking per student
-  uniqueStudentXP: unique().on(table.studentId),
-}));
+});
 
 // XP transactions - detailed log of all XP earning and spending activities
 export const xpTransactions = pgTable('xp_transactions', {
