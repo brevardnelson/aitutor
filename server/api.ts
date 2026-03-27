@@ -333,6 +333,12 @@ export class DashboardAPI {
           accuracyRate: accuracy,
           topicsWorked: session[0].topic ? [session[0].topic] : [],
         });
+
+        // Refresh topic mastery from full session history so teachers always see live data
+        if (session[0].subject && session[0].topic) {
+          await storage.refreshTopicMastery(studentId, session[0].subject, session[0].topic);
+        }
+
         if (problemsCompleted > 0) {
           await storage.checkAndAwardBadges(studentId, {
             action: 'problem_completed',

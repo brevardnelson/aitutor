@@ -417,6 +417,54 @@ export class DashboardStorage {
     }
   }
 
+  // Recompute topic mastery from all historical learning sessions for (student, subject, topic).
+  // Called automatically at the end of every session so real students always have up-to-date data.
+  async refreshTopicMastery(studentId: number, subject: string, topic: string): Promise<void> {
+    if (!subject || !topic) return;
+
+    const rows = await this.sql<{
+      total_problems: string;
+      completed_problems: string;
+      total_correct: string;
+      total_time: string;
+    }>`
+      SELECT
+        SUM(problems_attempted)::text  AS total_problems,
+        SUM(problems_completed)::text  AS completed_problems,
+        SUM(correct_answers)::text     AS total_correct,
+        SUM(duration)::text            AS total_time
+      FROM learning_sessions
+      WHERE student_id = ${studentId}
+        AND subject    = ${subject}
+        AND topic      = ${topic}
+    `;
+
+    const row = rows[0];
+    const totalProblems    = Number(row?.total_problems    ?? 0);
+    const completedProblems = Number(row?.completed_problems ?? 0);
+    const totalCorrect      = Number(row?.total_correct      ?? 0);
+    const totalTime         = Number(row?.total_time         ?? 0);
+
+    if (totalProblems === 0) return; // No sessions for this topic yet
+
+    const accuracyRate = Math.round((totalCorrect / totalProblems) * 100);
+
+    const masteryLevel: 'novice' | 'developing' | 'proficient' | 'mastered' =
+      accuracyRate >= 80 ? 'mastered'
+      : accuracyRate >= 65 ? 'proficient'
+      : accuracyRate >= 40 ? 'developing'
+      : 'novice';
+
+    await this.updateTopicMastery(studentId, subject, topic, {
+      totalProblems,
+      completedProblems,
+      accuracyRate,
+      masteryLevel,
+      timeSpent: totalTime,
+      lastActivityDate: new Date().toISOString(),
+    });
+  }
+
   // Daily Activity
   async updateDailyActivity(studentId: number, date: string, activity: {
     totalTime?: number;
