@@ -159,9 +159,51 @@ export const teacherAPI = {
       }
 
       const data = await response.json();
+
+      // Remap server response shape to the StudentProfile shape components expect.
+      // Server returns: { studentId, user: { fullName, email }, progress: { timeSpent, accuracyRate, ... } }
+      // Components expect: { studentId, studentName, email, analytics: { totalTimeSpent, ... } }
+      const rawStudents: any[] = data.students || [];
+      const students: StudentProfile[] = rawStudents.map((s: any) => {
+        const prog = s.progress || s.analytics || {};
+        const rawActivity: any[] = prog.recentActivity || [];
+        const rawMastery: any[] = prog.topicMastery || [];
+
+        const totalSessions = rawActivity.reduce((sum: number, d: any) => sum + (Number(d.sessionsCount ?? d.sessionsCompleted ?? 1)), 0);
+
+        return {
+          studentId: s.studentId,
+          studentName: s.user?.fullName || s.studentName || 'Student',
+          email: s.user?.email || s.email || '',
+          analytics: {
+            totalTimeSpent: Number(prog.timeSpent ?? prog.totalTimeSpent ?? 0),
+            averageSessionDuration: totalSessions > 0
+              ? Number(prog.timeSpent ?? prog.totalTimeSpent ?? 0) / totalSessions
+              : 0,
+            totalSessions,
+            accuracyRate: Number(prog.accuracyRate ?? 0),
+            engagementStreak: Number(prog.engagementStreak ?? 0),
+            lastActive: prog.lastActive ?? null,
+            recentActivity: rawActivity.map((a: any) => ({
+              date: a.date,
+              sessionsCompleted: Number(a.sessionsCount ?? a.sessionsCompleted ?? 1),
+              timeSpent: Number(a.totalTime ?? a.timeSpent ?? 0),
+              averageAccuracy: parseFloat(String(a.accuracyRate ?? a.averageAccuracy ?? 0)),
+            })),
+            topicMastery: rawMastery.map((t: any) => ({
+              topic: t.topic,
+              // masteryLevel as a percentage number (0-100)
+              masteryLevel: parseFloat(String(t.accuracyRate ?? t.masteryLevel ?? 0)),
+              sessionsCompleted: Number(t.totalProblems ?? t.sessionsCompleted ?? 0),
+              timeSpent: Number(t.timeSpent ?? 0),
+            })),
+          },
+        };
+      });
+
       return {
         classInfo: data.classInfo || { id: classId, name: '', subject: '', grade_level: '' },
-        students: data.students || data,
+        students,
       };
     } catch (error) {
       console.error('Failed to fetch students progress:', error);

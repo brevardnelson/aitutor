@@ -197,23 +197,27 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
       )
     );
 
-    // Get most practiced topics
+    // Get most practiced topics with average accuracy
     const topicStats = await db.select({
       topic: schema.learningSessions.topic,
       subject: schema.learningSessions.subject,
       sessionCount: count(),
-      totalTime: sql<number>`SUM(${schema.learningSessions.duration})`,
+      totalTime: sql<number>`COALESCE(SUM(${schema.learningSessions.duration}), 0)`,
+      averageAccuracy: sql<number>`ROUND(
+        COALESCE(SUM(${schema.learningSessions.correctAnswers}), 0) * 100.0 /
+        NULLIF(SUM(${schema.learningSessions.problemsAttempted}), 0)
+      , 1)`,
     })
     .from(schema.learningSessions)
     .where(
       and(
         inArray(schema.learningSessions.studentId, studentIds),
-        gte(schema.learningSessions.startTime, sql`NOW() - INTERVAL '7 days'`)
+        gte(schema.learningSessions.startTime, sql`NOW() - INTERVAL '30 days'`)
       )
     )
     .groupBy(schema.learningSessions.topic, schema.learningSessions.subject)
     .orderBy(desc(count()))
-    .limit(5);
+    .limit(8);
 
     // Get curriculum coverage (topics with any activity)
     const [curriculumStats] = await db.select({
@@ -227,20 +231,53 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
       )
     );
 
-    // Estimate total curriculum topics (this would be configurable in a real system)
-    const estimatedTotalTopics = 50; // This should come from curriculum definition
-    const curriculumCoverage = Math.min(100, (curriculumStats.topicsWithActivity / estimatedTotalTopics) * 100);
+    // Active student counts using DISTINCT student_id (not row counts)
+    const [todayDistinct] = await db.execute<{ c: string }>(sql`
+      SELECT COUNT(DISTINCT student_id)::text AS c
+      FROM daily_activity
+      WHERE student_id = ANY(ARRAY[${sql.raw(studentIds.join(','))}]::int[])
+        AND date = ${today}
+        AND total_time > 0
+    `);
+    const [weekDistinct] = await db.execute<{ c: string }>(sql`
+      SELECT COUNT(DISTINCT student_id)::text AS c
+      FROM daily_activity
+      WHERE student_id = ANY(ARRAY[${sql.raw(studentIds.join(','))}]::int[])
+        AND date >= ${weekAgo}
+        AND total_time > 0
+    `);
+    const [monthDistinct] = await db.execute<{ c: string }>(sql`
+      SELECT COUNT(DISTINCT student_id)::text AS c
+      FROM daily_activity
+      WHERE student_id = ANY(ARRAY[${sql.raw(studentIds.join(','))}]::int[])
+        AND date >= ${monthAgo}
+        AND total_time > 0
+    `);
 
+    // Estimate total curriculum topics (this would be configurable in a real system)
+    const estimatedTotalTopics = 50;
+    const curriculumCoverage = Math.min(100, (Number(curriculumStats.topicsWithActivity) / estimatedTotalTopics) * 100);
+
+    const cls = classInfo[0];
     res.json({
       success: true,
       overview: {
+        className: cls.name,
+        subject: cls.subject,
+        gradeLevel: cls.gradeLevel,
         totalStudents: activeStudents.length,
-        activeStudentsToday: todayActive.count,
-        activeStudentsThisWeek: weekActive.count,
-        activeStudentsThisMonth: monthActive.count,
-        avgTimePerStudent: Math.round(avgStats.avgTime),
-        overallAccuracyRate: Math.round(avgStats.avgAccuracy * 100) / 100,
-        topicsMostPracticed: topicStats,
+        activeStudentsToday: Number((todayDistinct as any)?.c ?? todayActive.count),
+        activeStudentsThisWeek: Number((weekDistinct as any)?.c ?? weekActive.count),
+        activeStudentsThisMonth: Number((monthDistinct as any)?.c ?? monthActive.count),
+        avgTimePerStudent: Math.round(Number(avgStats.avgTime)),
+        overallAccuracyRate: Math.round(Number(avgStats.avgAccuracy) * 100) / 100,
+        topicsMostPracticed: topicStats.map(t => ({
+          topic: t.topic,
+          subject: t.subject,
+          sessionCount: Number(t.sessionCount),
+          totalTime: Number(t.totalTime),
+          averageAccuracy: Number(t.averageAccuracy ?? 0),
+        })),
         curriculumCoverage: Math.round(curriculumCoverage * 100) / 100,
       },
     });
@@ -328,6 +365,7 @@ router.get('/class/:classId/students', authenticateToken, requireTeacherOrAbove,
           accuracyRate: schema.topicMastery.accuracyRate,
           masteryLevel: schema.topicMastery.masteryLevel,
           timeSpent: schema.topicMastery.timeSpent,
+          totalProblems: schema.topicMastery.totalProblems,
           lastActivityDate: schema.topicMastery.lastActivityDate,
         })
         .from(schema.topicMastery)
