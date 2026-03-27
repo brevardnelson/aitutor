@@ -2,12 +2,14 @@
 
 const API_BASE = '/api/teacher';
 
-// Get auth headers for API calls
+// Get auth headers — prefer RBAC token, fall back to main-app token
 const getAuthHeaders = (): HeadersInit => {
-  const session = JSON.parse(localStorage.getItem('caribbeanAI_rbac_session') || '{}');
+  const token = localStorage.getItem('caribbeanAI_auth_token')
+    || localStorage.getItem('caribbeanAI_token')
+    || '';
   return {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${session.token}`
+    'Authorization': `Bearer ${token}`,
   };
 };
 
@@ -15,11 +17,12 @@ export interface TeacherClass {
   id: number;
   name: string;
   subject: string;
-  grade_level: string;
-  max_students: number;
-  is_active: boolean;
-  school_name: string;
-  student_count: number;
+  gradeLevel: string;
+  maxStudents: number;
+  isActive: boolean;
+  schoolId: number;
+  schoolName: string;
+  totalStudents: number;
 }
 
 export interface ClassOverview {
@@ -32,19 +35,11 @@ export interface ClassOverview {
     school_name: string;
   };
   analytics: {
-    activeStudents: {
-      daily: number;
-      weekly: number;
-      monthly: number;
-    };
-    averageTimeSpent: number; // in minutes
-    overallAccuracy: number; // percentage
-    topicsPracticed: Array<{
-      topic: string;
-      sessionCount: number;
-      averageAccuracy: number;
-    }>;
-    curriculumCoverage: number; // percentage
+    activeStudents: { daily: number; weekly: number; monthly: number };
+    averageTimeSpent: number;
+    overallAccuracy: number;
+    topicsPracticed: Array<{ topic: string; sessionCount: number; averageAccuracy: number }>;
+    curriculumCoverage: number;
   };
 }
 
@@ -53,11 +48,11 @@ export interface StudentProfile {
   studentName: string;
   email: string;
   analytics: {
-    totalTimeSpent: number; // in minutes
-    averageSessionDuration: number; // in minutes
+    totalTimeSpent: number;
+    averageSessionDuration: number;
     totalSessions: number;
-    accuracyRate: number; // percentage
-    engagementStreak: number; // days
+    accuracyRate: number;
+    engagementStreak: number;
     recentActivity: Array<{
       date: string;
       sessionsCompleted: number;
@@ -66,7 +61,7 @@ export interface StudentProfile {
     }>;
     topicMastery: Array<{
       topic: string;
-      masteryLevel: number; // percentage
+      masteryLevel: number;
       sessionsCompleted: number;
       timeSpent: number;
     }>;
@@ -91,14 +86,16 @@ export const teacherAPI = {
     try {
       const response = await fetch(`${API_BASE}/classes`, {
         method: 'GET',
-        headers: getAuthHeaders()
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      return data.classes || data;
     } catch (error) {
       console.error('Failed to fetch teacher classes:', error);
       throw new Error('Failed to load classes');
@@ -110,14 +107,38 @@ export const teacherAPI = {
     try {
       const response = await fetch(`${API_BASE}/class/${classId}/overview`, {
         method: 'GET',
-        headers: getAuthHeaders()
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      // Server returns flat overview; transform to nested structure components expect
+      const raw = data.overview || data;
+      return {
+        classInfo: {
+          id: classId,
+          name: raw.className || '',
+          subject: raw.subject || '',
+          grade_level: raw.gradeLevel || '',
+          student_count: raw.totalStudents ?? 0,
+          school_name: raw.schoolName || '',
+        },
+        analytics: {
+          activeStudents: {
+            daily: raw.activeStudentsToday ?? 0,
+            weekly: raw.activeStudentsThisWeek ?? 0,
+            monthly: raw.activeStudentsThisMonth ?? 0,
+          },
+          averageTimeSpent: raw.avgTimePerStudent ?? 0,
+          overallAccuracy: raw.overallAccuracyRate ?? 0,
+          topicsPracticed: raw.topicsMostPracticed || [],
+          curriculumCoverage: raw.curriculumCoverage ?? 0,
+        },
+      };
     } catch (error) {
       console.error('Failed to fetch class overview:', error);
       throw new Error('Failed to load class overview');
@@ -129,17 +150,22 @@ export const teacherAPI = {
     try {
       const response = await fetch(`${API_BASE}/class/${classId}/students`, {
         method: 'GET',
-        headers: getAuthHeaders()
+        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      return {
+        classInfo: data.classInfo || { id: classId, name: '', subject: '', grade_level: '' },
+        students: data.students || data,
+      };
     } catch (error) {
       console.error('Failed to fetch students progress:', error);
       throw new Error('Failed to load student progress');
     }
-  }
+  },
 };

@@ -162,7 +162,7 @@ export const TeacherDashboard: React.FC = () => {
               >
                 {classes.map((cls) => (
                   <option key={cls.id} value={cls.id}>
-                    {cls.name} - {cls.subject} (Grade {cls.grade_level})
+                    {cls.name} - {cls.subject} (Grade {cls.gradeLevel})
                   </option>
                 ))}
               </select>
@@ -194,17 +194,17 @@ export const TeacherDashboard: React.FC = () => {
 
                 {/* Class Overview Tab */}
                 <TabsContent value="overview">
-                  <ClassOverview classId={selectedClass.id} />
+                  <ClassOverview classId={selectedClass.id} selectedClass={selectedClass} />
                 </TabsContent>
 
                 {/* Student Progress Tab */}
                 <TabsContent value="students">
-                  <StudentProgress classId={selectedClass.id} />
+                  <StudentProgress classId={selectedClass.id} selectedClass={selectedClass} />
                 </TabsContent>
 
                 {/* Performance Analytics Tab */}
                 <TabsContent value="analytics">
-                  <PerformanceAnalytics classId={selectedClass.id} />
+                  <PerformanceAnalytics classId={selectedClass.id} selectedClass={selectedClass} />
                 </TabsContent>
 
                 {/* Gamification Tab */}

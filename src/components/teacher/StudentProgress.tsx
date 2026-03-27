@@ -16,13 +16,14 @@ import {
   Award
 } from 'lucide-react';
 
-import { teacherAPI, StudentsProgress as StudentsProgressData } from '@/lib/teacher-api';
+import { teacherAPI, StudentsProgress as StudentsProgressData, TeacherClass } from '@/lib/teacher-api';
 
 interface StudentProgressProps {
   classId: number;
+  selectedClass?: TeacherClass;
 }
 
-export const StudentProgress: React.FC<StudentProgressProps> = ({ classId }) => {
+export const StudentProgress: React.FC<StudentProgressProps> = ({ classId, selectedClass }) => {
   const [data, setData] = useState<StudentsProgressData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,9 +95,11 @@ export const StudentProgress: React.FC<StudentProgressProps> = ({ classId }) => 
       {/* Class Information */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{data.classInfo.name}</CardTitle>
+          <CardTitle className="text-xl">
+            {selectedClass?.name || data.classInfo.name}
+          </CardTitle>
           <CardDescription>
-            {data.classInfo.subject} • Grade {data.classInfo.grade_level} • {data.students.length} Students
+            {selectedClass?.subject || data.classInfo.subject} • Grade {selectedClass?.gradeLevel || data.classInfo.grade_level} • {data.students.length} Students
           </CardDescription>
         </CardHeader>
       </Card>

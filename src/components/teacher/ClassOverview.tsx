@@ -14,13 +14,14 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-import { teacherAPI, ClassOverview as ClassOverviewData } from '@/lib/teacher-api';
+import { teacherAPI, ClassOverview as ClassOverviewData, TeacherClass } from '@/lib/teacher-api';
 
 interface ClassOverviewProps {
   classId: number;
+  selectedClass?: TeacherClass;
 }
 
-export const ClassOverview: React.FC<ClassOverviewProps> = ({ classId }) => {
+export const ClassOverview: React.FC<ClassOverviewProps> = ({ classId, selectedClass }) => {
   const [data, setData] = useState<ClassOverviewData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +75,12 @@ export const ClassOverview: React.FC<ClassOverviewProps> = ({ classId }) => {
 
   const { classInfo, analytics } = data;
 
+  const displayName = selectedClass?.name || classInfo.name;
+  const displaySubject = selectedClass?.subject || classInfo.subject;
+  const displayGrade = selectedClass?.gradeLevel || classInfo.grade_level;
+  const displaySchool = selectedClass?.schoolName || classInfo.school_name;
+  const displayStudentCount = selectedClass?.totalStudents ?? classInfo.student_count;
+
   return (
     <div className="space-y-6">
       {/* Class Information Header */}
@@ -81,13 +88,13 @@ export const ClassOverview: React.FC<ClassOverviewProps> = ({ classId }) => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-xl">{classInfo.name}</CardTitle>
+              <CardTitle className="text-xl">{displayName}</CardTitle>
               <CardDescription>
-                {classInfo.subject} • Grade {classInfo.grade_level} • {classInfo.school_name}
+                {displaySubject} • Grade {displayGrade} • {displaySchool}
               </CardDescription>
             </div>
             <Badge variant="secondary" className="text-lg px-3 py-1">
-              {classInfo.student_count} Students
+              {displayStudentCount} Students
             </Badge>
           </div>
         </CardHeader>
@@ -215,9 +222,9 @@ export const ClassOverview: React.FC<ClassOverviewProps> = ({ classId }) => {
             <div className="bg-blue-50 p-4 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">Engagement Level</h4>
               <p className="text-sm text-blue-700">
-                {analytics.activeStudents.daily > (classInfo.student_count * 0.7) 
+                {analytics.activeStudents.daily > (displayStudentCount * 0.7) 
                   ? "🔥 High engagement - Most students are actively participating!"
-                  : analytics.activeStudents.daily > (classInfo.student_count * 0.4)
+                  : analytics.activeStudents.daily > (displayStudentCount * 0.4)
                   ? "📈 Moderate engagement - Consider motivating inactive students"
                   : "⚠️ Low engagement - Action needed to re-engage students"
                 }

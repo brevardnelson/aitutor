@@ -4,7 +4,7 @@ import express, { Request, Response } from 'express';
 import Joi from 'joi';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, and, count, sql, desc, asc, gte, lte, isNotNull } from 'drizzle-orm';
+import { eq, and, count, sql, desc, asc, gte, lte, isNotNull, inArray } from 'drizzle-orm';
 import * as schema from '../shared/schema';
 import { authenticateToken, requireTeacherOrAbove } from './auth-middleware';
 
@@ -154,7 +154,7 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
     .from(schema.dailyActivity)
     .where(
       and(
-        sql`${schema.dailyActivity.studentId} = ANY(${studentIds})`,
+        inArray(schema.dailyActivity.studentId, studentIds),
         eq(schema.dailyActivity.date, today),
         sql`${schema.dailyActivity.totalTime} > 0`
       )
@@ -166,7 +166,7 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
     .from(schema.dailyActivity)
     .where(
       and(
-        sql`${schema.dailyActivity.studentId} = ANY(${studentIds})`,
+        inArray(schema.dailyActivity.studentId, studentIds),
         gte(schema.dailyActivity.date, weekAgo),
         sql`${schema.dailyActivity.totalTime} > 0`
       )
@@ -178,7 +178,7 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
     .from(schema.dailyActivity)
     .where(
       and(
-        sql`${schema.dailyActivity.studentId} = ANY(${studentIds})`,
+        inArray(schema.dailyActivity.studentId, studentIds),
         gte(schema.dailyActivity.date, monthAgo),
         sql`${schema.dailyActivity.totalTime} > 0`
       )
@@ -192,7 +192,7 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
     .from(schema.dailyActivity)
     .where(
       and(
-        sql`${schema.dailyActivity.studentId} = ANY(${studentIds})`,
+        inArray(schema.dailyActivity.studentId, studentIds),
         gte(schema.dailyActivity.date, weekAgo)
       )
     );
@@ -207,7 +207,7 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
     .from(schema.learningSessions)
     .where(
       and(
-        sql`${schema.learningSessions.studentId} = ANY(${studentIds})`,
+        inArray(schema.learningSessions.studentId, studentIds),
         gte(schema.learningSessions.startTime, sql`NOW() - INTERVAL '7 days'`)
       )
     )
@@ -222,7 +222,7 @@ router.get('/class/:classId/overview', authenticateToken, requireTeacherOrAbove,
     .from(schema.topicMastery)
     .where(
       and(
-        sql`${schema.topicMastery.studentId} = ANY(${studentIds})`,
+        inArray(schema.topicMastery.studentId, studentIds),
         sql`${schema.topicMastery.totalProblems} > 0`
       )
     );

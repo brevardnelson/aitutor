@@ -16,13 +16,14 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-import { teacherAPI, StudentsProgress, ClassOverview } from '@/lib/teacher-api';
+import { teacherAPI, StudentsProgress, ClassOverview, TeacherClass } from '@/lib/teacher-api';
 
 interface PerformanceAnalyticsProps {
   classId: number;
+  selectedClass?: TeacherClass;
 }
 
-export const PerformanceAnalytics: React.FC<PerformanceAnalyticsProps> = ({ classId }) => {
+export const PerformanceAnalytics: React.FC<PerformanceAnalyticsProps> = ({ classId, selectedClass }) => {
   const [classData, setClassData] = useState<ClassOverview | null>(null);
   const [studentsData, setStudentsData] = useState<StudentsProgress | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -101,10 +102,10 @@ export const PerformanceAnalytics: React.FC<PerformanceAnalyticsProps> = ({ clas
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
             <BarChart3 className="h-6 w-6" />
-            Performance Analytics - {classData.classInfo.name}
+            Performance Analytics - {selectedClass?.name || classData.classInfo.name}
           </CardTitle>
           <CardDescription>
-            {classData.classInfo.subject} • Grade {classData.classInfo.grade_level} • Comprehensive performance insights
+            {selectedClass?.subject || classData.classInfo.subject} • Grade {selectedClass?.gradeLevel || classData.classInfo.grade_level} • Comprehensive performance insights
           </CardDescription>
         </CardHeader>
       </Card>
@@ -364,7 +365,7 @@ export const PerformanceAnalytics: React.FC<PerformanceAnalyticsProps> = ({ clas
                   </div>
                 )}
                 
-                {classData.analytics.activeStudents.weekly < (classData.classInfo.student_count * 0.6) && (
+                {classData.analytics.activeStudents.weekly < ((selectedClass?.totalStudents ?? classData.classInfo.student_count) * 0.6) && (
                   <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
                     <h4 className="font-medium text-yellow-800 mb-2">📈 Engagement Opportunity</h4>
                     <p className="text-sm text-yellow-700">
