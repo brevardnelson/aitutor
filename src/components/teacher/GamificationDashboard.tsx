@@ -244,6 +244,7 @@ export const GamificationDashboard: React.FC<GamificationDashboardProps> = ({ cl
     try {
       const response = await fetch('/api/gamification/badges/award', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token') || localStorage.getItem('caribbeanAI_token') || ''}`

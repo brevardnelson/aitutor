@@ -41,11 +41,38 @@ async function ensureSchemaColumns() {
           SELECT 1 FROM pg_constraint 
           WHERE conname = 'daily_activity_student_date_key'
         ) THEN
-          -- Remove any existing duplicates first
           DELETE FROM daily_activity WHERE id NOT IN (
             SELECT MIN(id) FROM daily_activity GROUP BY student_id, date
           );
           ALTER TABLE daily_activity ADD CONSTRAINT daily_activity_student_date_key UNIQUE (student_id, date);
+        END IF;
+      END $$;
+    `);
+    // Ensure topic_mastery has a unique constraint on (student_id, subject, topic)
+    await db.execute(sql`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'topic_mastery_student_subject_topic_key'
+        ) THEN
+          DELETE FROM topic_mastery WHERE id NOT IN (
+            SELECT MIN(id) FROM topic_mastery GROUP BY student_id, subject, topic
+          );
+          ALTER TABLE topic_mastery ADD CONSTRAINT topic_mastery_student_subject_topic_key UNIQUE (student_id, subject, topic);
+        END IF;
+      END $$;
+    `);
+    // Ensure learning_sessions has a unique constraint on (student_id, start_time)
+    await db.execute(sql`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'learning_sessions_student_start_time_key'
+        ) THEN
+          DELETE FROM learning_sessions WHERE id NOT IN (
+            SELECT MIN(id) FROM learning_sessions GROUP BY student_id, start_time
+          );
+          ALTER TABLE learning_sessions ADD CONSTRAINT learning_sessions_student_start_time_key UNIQUE (student_id, start_time);
         END IF;
       END $$;
     `);
@@ -172,7 +199,7 @@ async function ensureTeacherSampleData() {
         });
       }
       if (sessions.length > 0) {
-        await db.insert(schema.learningSessions).values(sessions);
+        await db.insert(schema.learningSessions).values(sessions).onConflictDoNothing();
       }
     }
 
@@ -251,14 +278,9 @@ async function ensureTeacherSampleData() {
       },
     ];
 
-    for (const { studentId, rows } of masteryByStudent) {
-      const countRes = await db
-        .select({ c: sql<number>`count(*)::int` })
-        .from(schema.topicMastery)
-        .where(eq(schema.topicMastery.studentId, studentId));
-      const existing = Number(countRes[0]?.c ?? 0);
-      if (existing === 0) {
-        await db.insert(schema.topicMastery).values(rows);
+    for (const { rows } of masteryByStudent) {
+      if (rows.length > 0) {
+        await db.insert(schema.topicMastery).values(rows).onConflictDoNothing();
       }
     }
 
