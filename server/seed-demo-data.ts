@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { db } from './storage';
 import * as schema from '../shared/schema';
-import { sql, eq, inArray } from 'drizzle-orm';
+import { sql, eq, inArray, and } from 'drizzle-orm';
 
 async function ensureSchemaColumns() {
   try {
@@ -321,6 +321,387 @@ async function ensureTeacherSampleData() {
   }
 }
 
+async function ensureParentDemoData() {
+  try {
+    // ── Look up all relevant user IDs ────────────────────────────────────────
+    const relevantEmails = [
+      'parent.johnson@demo.com',
+      'parent.williams@demo.com',
+      'parent.garcia@demo.com',
+      'alex.johnson@demo.com',
+      'maya.johnson@demo.com',
+      'tyler.williams@demo.com',
+      'zoe.williams@demo.com',
+      'diego.garcia@demo.com',
+      'sofia.garcia@demo.com',
+      'emily.student@demo.com',
+      'marcus.student@demo.com',
+      'sophia.student@demo.com',
+    ];
+
+    const userRows = await db
+      .select({ id: schema.users.id, email: schema.users.email })
+      .from(schema.users)
+      .where(inArray(schema.users.email, relevantEmails));
+
+    if (userRows.length === 0) {
+      console.log('No parent demo users found, skipping parent data.');
+      return;
+    }
+
+    const um: Record<string, number> = {};
+    for (const u of userRows) um[u.email] = u.id;
+
+    const parentJohnsonId  = um['parent.johnson@demo.com'];
+    const parentWilliamsId = um['parent.williams@demo.com'];
+    const parentGarciaId   = um['parent.garcia@demo.com'];
+
+    if (!parentJohnsonId || !parentWilliamsId || !parentGarciaId) {
+      console.log('Parent demo users missing, skipping parent data.');
+      return;
+    }
+
+    // ── 1. Look up existing student records ──────────────────────────────────
+    const studentEmails = [
+      'alex.johnson@demo.com', 'maya.johnson@demo.com',
+      'tyler.williams@demo.com', 'zoe.williams@demo.com',
+      'diego.garcia@demo.com', 'sofia.garcia@demo.com',
+      'emily.student@demo.com', 'marcus.student@demo.com', 'sophia.student@demo.com',
+    ];
+
+    const studentRows = await db
+      .select({ id: schema.students.id, email: schema.users.email })
+      .from(schema.students)
+      .innerJoin(schema.users, eq(schema.students.userId, schema.users.id))
+      .where(inArray(schema.users.email, studentEmails));
+
+    const sm: Record<string, number> = {};
+    for (const s of studentRows) sm[s.email] = s.id;
+
+    // ── 2. Create orphaned student records for Emily, Marcus, Sophia ─────────
+    // Only insert if their user accounts exist but student records don't
+    const orphanedStudents = [
+      {
+        email: 'emily.student@demo.com',
+        name: 'Emily Johnson',
+        grade: 'form-1',
+        parentId: parentJohnsonId,
+        age: 12,
+        exam: 'high-school-entrance',
+        subject: 'mathematics',
+      },
+      {
+        email: 'marcus.student@demo.com',
+        name: 'Marcus Williams',
+        grade: 'standard-5',
+        parentId: parentWilliamsId,
+        age: 11,
+        exam: 'sea',
+        subject: 'mathematics',
+      },
+      {
+        email: 'sophia.student@demo.com',
+        name: 'Sophia Garcia',
+        grade: 'form-3',
+        parentId: parentGarciaId,
+        age: 14,
+        exam: 'csec',
+        subject: 'science',
+      },
+    ];
+
+    for (const s of orphanedStudents) {
+      const userId = um[s.email];
+      if (!userId) continue; // User doesn't exist either; skip
+
+      if (sm[s.email]) {
+        // Student row exists — reconcile parentId and userId if wrong
+        const existingId = sm[s.email];
+        await db.execute(sql`
+          UPDATE students
+          SET parent_id = ${s.parentId}, user_id = COALESCE(user_id, ${userId})
+          WHERE id = ${existingId}
+            AND (parent_id IS DISTINCT FROM ${s.parentId} OR user_id IS NULL)
+        `);
+        continue;
+      }
+
+      const [inserted] = await db.insert(schema.students).values({
+        userId,
+        name: s.name,
+        gradeLevel: s.grade,
+        parentId: s.parentId,
+        age: s.age,
+        targetExam: s.exam,
+      }).returning();
+
+      sm[s.email] = inserted.id;
+      console.log(`  Created student record for ${s.name}`);
+
+      // Basic XP for new students
+      await db.execute(sql`
+        INSERT INTO student_xp (student_id, total_xp, spent_xp, available_xp, level, weekly_xp, monthly_xp, last_xp_earned)
+        VALUES (${inserted.id}, 150, 0, 150, 1, 30, 120, NOW() - INTERVAL '3 days')
+        ON CONFLICT (student_id) DO NOTHING
+      `);
+    }
+
+    // ── 3. Seed subject enrollments for all demo students ────────────────────
+    // Alex, Maya, Emily, Marcus → mathematics
+    // Tyler, Zoe → science
+    // Diego → mathematics, Sofia → mathematics, Sophia → science
+    const subjectMap: Array<{ email: string; subject: string }> = [
+      { email: 'alex.johnson@demo.com',    subject: 'mathematics' },
+      { email: 'maya.johnson@demo.com',    subject: 'mathematics' },
+      { email: 'emily.student@demo.com',   subject: 'mathematics' },
+      { email: 'marcus.student@demo.com',  subject: 'mathematics' },
+      { email: 'tyler.williams@demo.com',  subject: 'science' },
+      { email: 'zoe.williams@demo.com',    subject: 'science' },
+      { email: 'diego.garcia@demo.com',    subject: 'mathematics' },
+      { email: 'sofia.garcia@demo.com',    subject: 'mathematics' },
+      { email: 'sophia.student@demo.com',  subject: 'science' },
+    ];
+
+    for (const { email, subject } of subjectMap) {
+      const studentId = sm[email];
+      if (!studentId) continue;
+      await db.execute(sql`
+        INSERT INTO student_subject_enrollments (student_id, subject)
+        VALUES (${studentId}, ${subject})
+        ON CONFLICT (student_id, subject) DO NOTHING
+      `);
+    }
+
+    // ── 4. Seed basic session/mastery data for Emily, Marcus, Sophia ─────────
+    const mathTopics = ['Fractions', 'Percentages', 'Algebra', 'Word Problems'];
+    const sciTopics  = ['Matter', 'Forces', 'Energy', 'Ecosystems'];
+
+    const orphanProfiles = [
+      { email: 'emily.student@demo.com',  subject: 'mathematics', topics: mathTopics, accuracy: 0.70,
+        activeDays: [2, 5, 9, 14, 18, 22] },
+      { email: 'marcus.student@demo.com', subject: 'mathematics', topics: mathTopics, accuracy: 0.60,
+        activeDays: [1, 4, 8, 12, 16, 20] },
+      { email: 'sophia.student@demo.com', subject: 'science',     topics: sciTopics,  accuracy: 0.75,
+        activeDays: [0, 3, 7, 11, 15, 19] },
+    ];
+
+    for (const p of orphanProfiles) {
+      const studentId = sm[p.email];
+      if (!studentId) continue;
+
+      const sessions: (typeof schema.learningSessions.$inferInsert)[] = [];
+      const dailyRows: (typeof schema.dailyActivity.$inferInsert)[] = [];
+
+      for (let i = 0; i < p.activeDays.length; i++) {
+        const start = daysBack(p.activeDays[i]);
+        start.setHours(15 + (i % 3), (i * 10) % 60, 0, 0);
+        const duration = 20 + (i % 3) * 5;
+        const end = new Date(start.getTime() + duration * 60000);
+        const attempted = 8 + (i % 4);
+        const correct   = Math.round(attempted * p.accuracy);
+        const completed = correct + Math.round((attempted - correct) * 0.5);
+        const topic = p.topics[i % p.topics.length];
+
+        sessions.push({
+          studentId,
+          subject: p.subject,
+          topic,
+          startTime: start,
+          endTime: end,
+          duration,
+          problemsAttempted: attempted,
+          problemsCompleted: completed,
+          correctAnswers: correct,
+          hintsUsed: 1,
+          avgAttemptsPerProblem: '1.5',
+          difficulty: 'easy',
+          sessionType: i % 2 === 0 ? 'practice' : 'review',
+        });
+
+        dailyRows.push({
+          studentId,
+          date: dateStr(daysBack(p.activeDays[i])),
+          totalTime: duration,
+          sessionsCount: 1,
+          topicsWorked: [topic],
+          problemsAttempted: attempted,
+          problemsCompleted: completed,
+          accuracyRate: String(Math.round(p.accuracy * 100)),
+        });
+      }
+
+      if (sessions.length > 0) {
+        await db.insert(schema.learningSessions).values(sessions).onConflictDoNothing();
+      }
+      if (dailyRows.length > 0) {
+        await db.insert(schema.dailyActivity).values(dailyRows).onConflictDoNothing();
+      }
+
+      // Basic topic mastery
+      const topics = p.topics.slice(0, 2);
+      const masteryRows: (typeof schema.topicMastery.$inferInsert)[] = topics.map((topic, i) => ({
+        studentId,
+        subject: p.subject,
+        topic,
+        totalProblems: 20 + i * 5,
+        completedProblems: 15 + i * 3,
+        accuracyRate: String(Math.round(p.accuracy * 100)),
+        masteryLevel: p.accuracy >= 0.75 ? 'proficient' : 'developing',
+        timeSpent: 50 + i * 15,
+        firstAttemptDate: daysBack(25),
+        lastActivityDate: daysBack(p.activeDays[0]),
+      }));
+      if (masteryRows.length > 0) {
+        await db.insert(schema.topicMastery).values(masteryRows).onConflictDoNothing();
+      }
+    }
+
+    // ── 5. Seed parent engagement rows ────────────────────────────────────────
+    // Each parent gets one engagement row per child they have
+    // Map parents to their children (studentId)
+    const parentChildMap: Array<{ parentId: number; studentEmail: string; metrics: {
+      totalLogins: number; goalsSet: number; goalsCompleted: number;
+      rewardsApproved: number; notificationsViewed: number;
+      engagementScore: string; engagementLevel: string;
+      weeklyLogins: number; monthlyLogins: number;
+    }}> = [
+      // Robert Johnson — very engaged (champion)
+      { parentId: parentJohnsonId, studentEmail: 'alex.johnson@demo.com',
+        metrics: { totalLogins: 45, goalsSet: 8, goalsCompleted: 5, rewardsApproved: 12, notificationsViewed: 30,
+                   engagementScore: '92', engagementLevel: 'champion', weeklyLogins: 6, monthlyLogins: 22 } },
+      { parentId: parentJohnsonId, studentEmail: 'maya.johnson@demo.com',
+        metrics: { totalLogins: 38, goalsSet: 7, goalsCompleted: 4, rewardsApproved: 10, notificationsViewed: 27,
+                   engagementScore: '88', engagementLevel: 'super_parent', weeklyLogins: 5, monthlyLogins: 20 } },
+      { parentId: parentJohnsonId, studentEmail: 'emily.student@demo.com',
+        metrics: { totalLogins: 20, goalsSet: 4, goalsCompleted: 2, rewardsApproved: 5, notificationsViewed: 15,
+                   engagementScore: '65', engagementLevel: 'active', weeklyLogins: 3, monthlyLogins: 12 } },
+
+      // Lisa Williams — moderately engaged (super_parent)
+      { parentId: parentWilliamsId, studentEmail: 'tyler.williams@demo.com',
+        metrics: { totalLogins: 32, goalsSet: 6, goalsCompleted: 4, rewardsApproved: 11, notificationsViewed: 22,
+                   engagementScore: '78', engagementLevel: 'super_parent', weeklyLogins: 5, monthlyLogins: 18 } },
+      { parentId: parentWilliamsId, studentEmail: 'zoe.williams@demo.com',
+        metrics: { totalLogins: 40, goalsSet: 6, goalsCompleted: 5, rewardsApproved: 13, notificationsViewed: 28,
+                   engagementScore: '85', engagementLevel: 'super_parent', weeklyLogins: 5, monthlyLogins: 21 } },
+      { parentId: parentWilliamsId, studentEmail: 'marcus.student@demo.com',
+        metrics: { totalLogins: 15, goalsSet: 3, goalsCompleted: 1, rewardsApproved: 4, notificationsViewed: 11,
+                   engagementScore: '55', engagementLevel: 'active', weeklyLogins: 2, monthlyLogins: 10 } },
+
+      // Carlos Garcia — less engaged (active)
+      { parentId: parentGarciaId, studentEmail: 'diego.garcia@demo.com',
+        metrics: { totalLogins: 12, goalsSet: 2, goalsCompleted: 0, rewardsApproved: 3, notificationsViewed: 8,
+                   engagementScore: '42', engagementLevel: 'new', weeklyLogins: 1, monthlyLogins: 8 } },
+      { parentId: parentGarciaId, studentEmail: 'sofia.garcia@demo.com',
+        metrics: { totalLogins: 18, goalsSet: 4, goalsCompleted: 2, rewardsApproved: 6, notificationsViewed: 12,
+                   engagementScore: '58', engagementLevel: 'active', weeklyLogins: 3, monthlyLogins: 12 } },
+      { parentId: parentGarciaId, studentEmail: 'sophia.student@demo.com',
+        metrics: { totalLogins: 10, goalsSet: 2, goalsCompleted: 1, rewardsApproved: 2, notificationsViewed: 7,
+                   engagementScore: '38', engagementLevel: 'new', weeklyLogins: 1, monthlyLogins: 6 } },
+    ];
+
+    for (const { parentId, studentEmail, metrics } of parentChildMap) {
+      const studentId = sm[studentEmail];
+      if (!studentId) continue;
+
+      await db.execute(sql`
+        INSERT INTO parent_engagement (
+          parent_id, student_id,
+          total_logins, goals_set, goals_completed, rewards_approved, notifications_viewed,
+          engagement_score, engagement_level, weekly_logins, monthly_logins,
+          last_login
+        )
+        VALUES (
+          ${parentId}, ${studentId},
+          ${metrics.totalLogins}, ${metrics.goalsSet}, ${metrics.goalsCompleted},
+          ${metrics.rewardsApproved}, ${metrics.notificationsViewed},
+          ${metrics.engagementScore}, ${metrics.engagementLevel},
+          ${metrics.weeklyLogins}, ${metrics.monthlyLogins},
+          NOW() - INTERVAL '1 day'
+        )
+        ON CONFLICT (parent_id, student_id) DO NOTHING
+      `);
+    }
+
+    // ── 6. Seed parent achievements (badges) so Achievement Center has data ──
+    const badgeDefinitions = [
+      {
+        type: 'supportive_parent', title: '🤗 Supportive Parent',
+        description: "Actively encourages child's learning journey", icon: '🤗',
+        metric: 'login_streak', threshold: '7',
+      },
+      {
+        type: 'goal_setter', title: '🎯 Goal Setter',
+        description: 'Sets meaningful learning goals for their child', icon: '🎯',
+        metric: 'goals_set', threshold: '5',
+      },
+      {
+        type: 'reward_manager', title: '🎁 Reward Manager',
+        description: "Thoughtfully manages child's point redemptions", icon: '🎁',
+        metric: 'rewards_approved', threshold: '10',
+      },
+      {
+        type: 'engagement_champion', title: '🏆 Engagement Champion',
+        description: "Consistently involved in child's educational progress", icon: '🏆',
+        metric: 'total_logins', threshold: '30',
+      },
+    ];
+
+    // Robert Johnson earns most badges (highly engaged)
+    const parentAchievementSeeds: Array<{ parentId: number; studentEmail: string; badges: string[] }> = [
+      { parentId: parentJohnsonId, studentEmail: 'alex.johnson@demo.com',
+        badges: ['supportive_parent', 'goal_setter', 'reward_manager', 'engagement_champion'] },
+      { parentId: parentJohnsonId, studentEmail: 'maya.johnson@demo.com',
+        badges: ['supportive_parent', 'goal_setter'] },
+      { parentId: parentWilliamsId, studentEmail: 'tyler.williams@demo.com',
+        badges: ['supportive_parent', 'goal_setter', 'reward_manager'] },
+      { parentId: parentWilliamsId, studentEmail: 'zoe.williams@demo.com',
+        badges: ['supportive_parent', 'engagement_champion'] },
+      { parentId: parentGarciaId, studentEmail: 'sofia.garcia@demo.com',
+        badges: ['supportive_parent'] },
+    ];
+
+    for (const { parentId, studentEmail, badges } of parentAchievementSeeds) {
+      const studentId = sm[studentEmail];
+      if (!studentId) continue;
+
+      for (const badgeType of badges) {
+        const badgeDef = badgeDefinitions.find(b => b.type === badgeType);
+        if (!badgeDef) continue;
+
+        // Check if already exists (no unique constraint on table, so manual check)
+        const existing = await db
+          .select({ id: schema.parentAchievements.id })
+          .from(schema.parentAchievements)
+          .where(
+            and(
+              eq(schema.parentAchievements.parentId, parentId),
+              eq(schema.parentAchievements.studentId, studentId),
+              eq(schema.parentAchievements.type, badgeDef.type)
+            )
+          )
+          .limit(1);
+        if (existing.length > 0) continue;
+
+        await db.execute(sql`
+          INSERT INTO parent_achievements (
+            parent_id, student_id, type, title, description, badge_icon,
+            metric, threshold, actual_value
+          )
+          VALUES (
+            ${parentId}, ${studentId},
+            ${badgeDef.type}, ${badgeDef.title}, ${badgeDef.description}, ${badgeDef.icon},
+            ${badgeDef.metric}, ${badgeDef.threshold}, ${badgeDef.threshold}
+          )
+        `);
+      }
+    }
+
+    console.log('✅ Parent demo data seeded successfully!');
+  } catch (error) {
+    console.error('⚠️ Error seeding parent demo data:', error);
+  }
+}
+
 export async function seedDemoDataIfEmpty() {
   try {
     await ensureSchemaColumns();
@@ -328,8 +709,9 @@ export async function seedDemoDataIfEmpty() {
     const existingUsers = await db.select({ id: schema.users.id }).from(schema.users).limit(1);
     if (existingUsers.length > 0) {
       console.log('Database already has users, skipping seed.');
-      // Still run teacher sample data seeder in case it was partially seeded
+      // Still run idempotent seeders in case they were partially seeded
       await ensureTeacherSampleData();
+      await ensureParentDemoData();
       return;
     }
 
@@ -462,8 +844,9 @@ export async function seedDemoDataIfEmpty() {
       console.log('✅ Demo data seeded successfully! (' + insertedUsers.length + ' users, ' + insertedStudents.length + ' students)');
     });
 
-    // Run teacher sample data AFTER base seeding completes so student IDs exist
+    // Run idempotent seeders AFTER base seeding completes so student IDs exist
     await ensureTeacherSampleData();
+    await ensureParentDemoData();
   } catch (error) {
     console.error('⚠️ Error seeding demo data (will retry on next restart):', error);
   }
