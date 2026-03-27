@@ -23,19 +23,30 @@ import { StudentProgress } from './StudentProgress';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
 import { GamificationDashboard } from './GamificationDashboard';
 import { teacherAPI, TeacherClass } from '@/lib/teacher-api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const TeacherDashboard: React.FC = () => {
-  const { user, currentSchool, hasRole } = useRBAC();
+  const { user, currentSchool, hasRole, isLoading: authLoading } = useRBAC();
+  const { isLoading: jwtLoading } = useAuth();
+  // True until BOTH auth contexts have finished initialising
+  const isAuthInitialising = authLoading || jwtLoading;
   const [activeTab, setActiveTab] = useState('overview');
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load teacher's classes on component mount
+  // Only load classes once BOTH auth contexts have finished and user is confirmed
+  // as a teacher. This prevents 401 errors from the brief window where tokens
+  // haven't been validated yet (common after window.location.href hard reloads).
   useEffect(() => {
-    loadClasses();
-  }, []);
+    if (!isAuthInitialising && user && hasRole('teacher')) {
+      loadClasses();
+    } else if (!isAuthInitialising) {
+      // Auth done but user is not a teacher — stop the loading spinner
+      setIsLoading(false);
+    }
+  }, [isAuthInitialising, user]);
 
   // Auto-select first class when classes are loaded
   useEffect(() => {
@@ -61,6 +72,18 @@ export const TeacherDashboard: React.FC = () => {
     const selected = classes.find(c => c.id.toString() === classId);
     setSelectedClass(selected || null);
   };
+
+  // Show a spinner while either auth context is still initialising (avoids flash of wrong screen)
+  if (isAuthInitialising) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
