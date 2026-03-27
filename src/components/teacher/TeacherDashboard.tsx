@@ -1,8 +1,8 @@
 // Main Teacher Dashboard Component
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRBAC } from '@/contexts/RBACContext';
-import { RoleGuard } from '@/components/auth/RoleGuard';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,10 @@ import {
   GraduationCap, 
   Users, 
   BarChart3, 
-  BookOpen, 
   TrendingUp,
-  Calendar,
-  Clock,
-  Target
+  Target,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 import { ClassOverview } from './ClassOverview';
@@ -23,32 +22,53 @@ import { StudentProgress } from './StudentProgress';
 import { PerformanceAnalytics } from './PerformanceAnalytics';
 import { GamificationDashboard } from './GamificationDashboard';
 import { teacherAPI, TeacherClass } from '@/lib/teacher-api';
-import { useAuth } from '@/contexts/AuthContext';
+
+// Roles that are allowed to view the teacher dashboard
+const TEACHER_ROLES = ['teacher', 'school_admin', 'system_admin'] as const;
 
 export const TeacherDashboard: React.FC = () => {
-  const { user, currentSchool, hasRole, isLoading: authLoading } = useRBAC();
-  const { isLoading: jwtLoading } = useAuth();
-  // True until BOTH auth contexts have finished initialising
-  const isAuthInitialising = authLoading || jwtLoading;
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  // Use the JWT context as the single source of truth for "who is logged in".
+  // It is resolved by a single /api/auth/me call and has no cross-context
+  // sync lag, which was the root cause of the recurring 401/error loop.
+  const { user: jwtUser, isLoading: jwtLoading } = useAuth();
+
+  // RBAC context is used only for display helpers (school name, etc.)
+  const { currentSchool } = useRBAC();
+
+  // Derived auth facts — computed directly from the JWT user, no extra state.
+  const isTeacher = !jwtLoading && !!jwtUser &&
+    TEACHER_ROLES.includes(jwtUser.primaryRole as typeof TEACHER_ROLES[number]);
+
+  // ── Component state ───────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('overview');
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Only load classes once BOTH auth contexts have finished and user is confirmed
-  // as a teacher. This prevents 401 errors from the brief window where tokens
-  // haven't been validated yet (common after window.location.href hard reloads).
+  // Guard against calling loadClasses() more than once per mount.
+  const loadCalledRef = useRef(false);
+
+  // ── Load classes ──────────────────────────────────────────────────────────
+  // Only fires when we are certain the user is an authenticated teacher.
+  // The jwtLoading guard ensures we never act on a stale (null) user.
   useEffect(() => {
-    if (!isAuthInitialising && user && hasRole('teacher')) {
+    // Still waiting for the auth check to complete — keep the spinner up.
+    if (jwtLoading) return;
+
+    if (isTeacher && !loadCalledRef.current) {
+      loadCalledRef.current = true;
       loadClasses();
-    } else if (!isAuthInitialising) {
-      // Auth done but user is not a teacher — stop the loading spinner
+    } else if (!isTeacher) {
+      // Auth is done but user is not a teacher — stop spinner so the
+      // "sign in" / "access denied" screen is shown immediately.
       setIsLoading(false);
     }
-  }, [isAuthInitialising, user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jwtLoading, isTeacher]);
 
-  // Auto-select first class when classes are loaded
+  // Auto-select the first class once classes are fetched.
   useEffect(() => {
     if (classes.length > 0 && !selectedClass) {
       setSelectedClass(classes[0]);
@@ -68,13 +88,20 @@ export const TeacherDashboard: React.FC = () => {
     }
   };
 
+  const handleRetry = () => {
+    loadCalledRef.current = false;
+    loadClasses();
+  };
+
   const handleClassChange = (classId: string) => {
     const selected = classes.find(c => c.id.toString() === classId);
     setSelectedClass(selected || null);
   };
 
-  // Show a spinner while either auth context is still initialising (avoids flash of wrong screen)
-  if (isAuthInitialising) {
+  // ── Render guards ─────────────────────────────────────────────────────────
+
+  // Still verifying identity — show spinner so there's no flash of wrong screen.
+  if (jwtLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -85,28 +112,38 @@ export const TeacherDashboard: React.FC = () => {
     );
   }
 
-  if (!user) {
+  // Not logged in at all.
+  if (!jwtUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900">Please sign in to continue</h2>
           <p className="text-gray-600 mt-2">You need to be authenticated to access the teacher dashboard</p>
+          <Button className="mt-4" onClick={() => window.location.href = '/'}>
+            Go to sign in
+          </Button>
         </div>
       </div>
     );
   }
 
-  if (!hasRole('teacher')) {
+  // Logged in but not a teacher / admin.
+  if (!isTeacher) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900">Access Denied</h2>
           <p className="text-gray-600 mt-2">You need teacher permissions to access this dashboard</p>
+          <p className="text-sm text-gray-400 mt-1">Signed in as: {jwtUser.email} ({jwtUser.primaryRole})</p>
+          <Button className="mt-4" variant="outline" onClick={() => window.location.href = '/'}>
+            Back to Home
+          </Button>
         </div>
       </div>
     );
   }
 
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -119,7 +156,7 @@ export const TeacherDashboard: React.FC = () => {
               </h1>
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant="outline">
-                  {user.primaryRole.replace('_', ' ').toUpperCase()}
+                  {jwtUser.primaryRole.replace('_', ' ').toUpperCase()}
                 </Badge>
                 {currentSchool && (
                   <Badge variant="secondary">
@@ -135,9 +172,9 @@ export const TeacherDashboard: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Welcome, {user.full_name}</span>
-              <Button variant="outline" size="sm">
-                Profile
+              <span className="text-sm text-gray-600">Welcome, {jwtUser.fullName}</span>
+              <Button variant="outline" size="sm" onClick={() => window.location.href = '/'}>
+                Back to App
               </Button>
             </div>
           </div>
@@ -155,11 +192,18 @@ export const TeacherDashboard: React.FC = () => {
         ) : error ? (
           <div className="text-center py-12">
             <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto">
+              <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
               <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Classes</h3>
-              <p className="text-red-600 mb-4">{error}</p>
-              <Button onClick={loadClasses} variant="outline">
-                Try Again
-              </Button>
+              <p className="text-red-600 mb-4 font-mono text-sm">{error}</p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={handleRetry} variant="outline" className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  Try Again
+                </Button>
+                <Button variant="ghost" onClick={() => window.location.href = '/'}>
+                  Back to App
+                </Button>
+              </div>
             </div>
           </div>
         ) : classes.length === 0 ? (

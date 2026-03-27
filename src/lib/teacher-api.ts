@@ -83,23 +83,20 @@ export interface StudentsProgress {
 export const teacherAPI = {
   // Get teacher's classes
   async getClasses(): Promise<TeacherClass[]> {
-    try {
-      const response = await fetch(`${API_BASE}/classes`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: getAuthHeaders(),
-      });
+    const response = await fetch(`${API_BASE}/classes`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.classes || data;
-    } catch (error) {
-      console.error('Failed to fetch teacher classes:', error);
-      throw new Error('Failed to load classes');
+    if (!response.ok) {
+      let detail = '';
+      try { detail = (await response.json()).error || ''; } catch {}
+      throw new Error(`HTTP ${response.status}${detail ? ': ' + detail : ''}`);
     }
+
+    const data = await response.json();
+    return data.classes || data;
   },
 
   // Get class overview analytics
