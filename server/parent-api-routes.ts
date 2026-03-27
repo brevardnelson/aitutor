@@ -717,6 +717,362 @@ router.get('/engagement', authenticateToken, requireParentOrAbove, async (req, r
   }
 });
 
+// GET /api/parent/children/:id/analytics - Get detailed analytics for a child
+router.get('/children/:id/analytics', authenticateToken, requireParentOrAbove, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User ID not found' });
+    const childId = parseInt(req.params.id);
+    if (isNaN(childId)) return res.status(400).json({ error: 'Invalid child ID' });
+
+    // Verify ownership
+    const [child] = await db.select()
+      .from(schema.students)
+      .where(and(eq(schema.students.id, childId), eq(schema.students.parentId, userId)))
+      .limit(1);
+    if (!child) return res.status(404).json({ error: 'Child not found' });
+
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get all sessions for this child
+    const sessions = await db.select()
+      .from(schema.learningSessions)
+      .where(eq(schema.learningSessions.studentId, childId))
+      .orderBy(desc(schema.learningSessions.startTime));
+
+    const recentSessions = sessions.filter(s => new Date(s.startTime) >= oneWeekAgo);
+
+    // Topic mastery: group by topic
+    const topicMap: Record<string, { topic: string; subject: string; sessions: number; correct: number; attempted: number; timeSpent: number }> = {};
+    for (const s of sessions) {
+      const key = `${s.subject}::${s.topic}`;
+      if (!topicMap[key]) topicMap[key] = { topic: s.topic, subject: s.subject, sessions: 0, correct: 0, attempted: 0, timeSpent: 0 };
+      topicMap[key].sessions++;
+      topicMap[key].correct += s.correctAnswers || 0;
+      topicMap[key].attempted += s.problemsAttempted || 0;
+      topicMap[key].timeSpent += s.duration || 0;
+    }
+    const topicMastery = Object.values(topicMap).map(t => ({
+      topic: t.topic,
+      subject: t.subject,
+      sessionsCompleted: t.sessions,
+      masteryLevel: t.attempted > 0 ? Math.round((t.correct / t.attempted) * 100) : 0,
+      timeSpent: t.timeSpent,
+    })).sort((a, b) => b.masteryLevel - a.masteryLevel);
+
+    // Recent activity by day
+    const dayMap: Record<string, { date: string; sessionsCompleted: number; timeSpent: number; correct: number; attempted: number }> = {};
+    for (const s of recentSessions) {
+      const day = new Date(s.startTime).toISOString().split('T')[0];
+      if (!dayMap[day]) dayMap[day] = { date: day, sessionsCompleted: 0, timeSpent: 0, correct: 0, attempted: 0 };
+      dayMap[day].sessionsCompleted++;
+      dayMap[day].timeSpent += s.duration || 0;
+      dayMap[day].correct += s.correctAnswers || 0;
+      dayMap[day].attempted += s.problemsAttempted || 0;
+    }
+    const recentActivity = Object.values(dayMap)
+      .map(d => ({ ...d, averageAccuracy: d.attempted > 0 ? Math.round((d.correct / d.attempted) * 100) : 0 }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    // Accuracy over time (last 30 days by week)
+    const weekMap: Record<string, { week: string; correct: number; attempted: number }> = {};
+    for (const s of sessions.filter(s => new Date(s.startTime) >= thirtyDaysAgo)) {
+      const date = new Date(s.startTime);
+      const weekStart = new Date(date); weekStart.setDate(date.getDate() - date.getDay());
+      const key = weekStart.toISOString().split('T')[0];
+      if (!weekMap[key]) weekMap[key] = { week: key, correct: 0, attempted: 0 };
+      weekMap[key].correct += s.correctAnswers || 0;
+      weekMap[key].attempted += s.problemsAttempted || 0;
+    }
+    const accuracyOverTime = Object.values(weekMap)
+      .map(w => ({ week: w.week, accuracy: w.attempted > 0 ? Math.round((w.correct / w.attempted) * 100) : 0 }))
+      .sort((a, b) => a.week.localeCompare(b.week));
+
+    // Subject coverage
+    const subjectMap: Record<string, { subject: string; sessions: number; timeSpent: number }> = {};
+    for (const s of sessions) {
+      if (!subjectMap[s.subject]) subjectMap[s.subject] = { subject: s.subject, sessions: 0, timeSpent: 0 };
+      subjectMap[s.subject].sessions++;
+      subjectMap[s.subject].timeSpent += s.duration || 0;
+    }
+    const subjectCoverage = Object.values(subjectMap);
+
+    // Overall stats
+    const totalSessions = sessions.length;
+    const totalCorrect = sessions.reduce((sum, s) => sum + (s.correctAnswers || 0), 0);
+    const totalAttempted = sessions.reduce((sum, s) => sum + (s.problemsAttempted || 0), 0);
+    const accuracyRate = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : 0;
+    const totalTimeSpent = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+
+    // Streak calculation
+    const sessionDays = new Set(sessions.map(s => new Date(s.startTime).toISOString().split('T')[0]));
+    let streak = 0;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(today);
+    while (sessionDays.has(checkDate.toISOString().split('T')[0])) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    // Areas needing attention: topics with mastery < 60%
+    const areasNeedingAttention = topicMastery.filter(t => t.masteryLevel < 60 && t.sessionsCompleted >= 2);
+
+    const lastActive = sessions.length > 0 ? sessions[0].startTime : null;
+
+    res.json({
+      analytics: {
+        totalSessions,
+        accuracyRate,
+        totalTimeSpent,
+        engagementStreak: streak,
+        lastActive,
+        topicMastery,
+        recentActivity,
+        accuracyOverTime,
+        subjectCoverage,
+        areasNeedingAttention,
+      }
+    });
+  } catch (error) {
+    console.error('Get child analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch child analytics' });
+  }
+});
+
+// GET /api/parent/children/:id/gamification - Get gamification data for a child
+router.get('/children/:id/gamification', authenticateToken, requireParentOrAbove, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User ID not found' });
+    const childId = parseInt(req.params.id);
+    if (isNaN(childId)) return res.status(400).json({ error: 'Invalid child ID' });
+
+    // Verify ownership
+    const [child] = await db.select()
+      .from(schema.students)
+      .where(and(eq(schema.students.id, childId), eq(schema.students.parentId, userId)))
+      .limit(1);
+    if (!child) return res.status(404).json({ error: 'Child not found' });
+
+    // XP data
+    const [xpData] = await db.select()
+      .from(schema.studentXP)
+      .where(eq(schema.studentXP.studentId, childId))
+      .limit(1);
+
+    // Badges earned
+    const badges = await db.select({
+      id: schema.studentBadges.id,
+      badgeId: schema.studentBadges.badgeId,
+      name: schema.badgeDefinitions.name,
+      description: schema.badgeDefinitions.description,
+      icon: schema.badgeDefinitions.icon,
+      category: schema.badgeDefinitions.category,
+      tier: schema.badgeDefinitions.tier,
+      earnedAt: schema.studentBadges.earnedAt,
+    })
+    .from(schema.studentBadges)
+    .leftJoin(schema.badgeDefinitions, eq(schema.studentBadges.badgeId, schema.badgeDefinitions.id))
+    .where(and(eq(schema.studentBadges.studentId, childId), eq(schema.studentBadges.isEarned, true)))
+    .orderBy(desc(schema.studentBadges.earnedAt));
+
+    // Active weekly challenges
+    const now = new Date();
+    const challengeData = await db.select({
+      challengeId: schema.challengeParticipation.challengeId,
+      title: schema.challenges.title,
+      description: schema.challenges.description,
+      currentValue: schema.challengeParticipation.currentValue,
+      targetValue: schema.challenges.targetValue,
+      metric: schema.challenges.metric,
+      isCompleted: schema.challengeParticipation.isCompleted,
+      endDate: schema.challenges.endDate,
+      xpReward: schema.challenges.xpReward,
+    })
+    .from(schema.challengeParticipation)
+    .leftJoin(schema.challenges, eq(schema.challengeParticipation.challengeId, schema.challenges.id))
+    .where(
+      and(
+        eq(schema.challengeParticipation.studentId, childId),
+        gte(schema.challenges.endDate, now)
+      )
+    )
+    .limit(5);
+
+    const xp = xpData || { totalXP: 0, level: 1, weeklyXP: 0, availableXP: 0 };
+    const xpToNextLevel = (xp.level || 1) * 100 - (xp.totalXP || 0) % ((xp.level || 1) * 100);
+
+    res.json({
+      xp: {
+        totalXP: xp.totalXP || 0,
+        currentLevel: xp.level || 1,
+        weeklyXP: xp.weeklyXP || 0,
+        availableXP: xp.availableXP || 0,
+        xpToNextLevel: Math.max(0, xpToNextLevel),
+      },
+      badges: badges.map(b => ({
+        id: b.id,
+        badgeId: b.badgeId,
+        name: b.name || 'Badge',
+        description: b.description || '',
+        icon: b.icon || '🏆',
+        category: b.category || 'general',
+        tier: b.tier || 'bronze',
+        earnedAt: b.earnedAt,
+      })),
+      challenges: challengeData.map(c => ({
+        challengeId: c.challengeId,
+        title: c.title || 'Challenge',
+        description: c.description || '',
+        currentValue: c.currentValue || 0,
+        targetValue: c.targetValue || 0,
+        metric: c.metric || 'problems_completed',
+        isCompleted: c.isCompleted || false,
+        endDate: c.endDate,
+        xpReward: c.xpReward || 0,
+        progress: c.targetValue ? Math.round(((c.currentValue || 0) / c.targetValue) * 100) : 0,
+      })),
+    });
+  } catch (error) {
+    console.error('Get child gamification error:', error);
+    res.status(500).json({ error: 'Failed to fetch child gamification' });
+  }
+});
+
+// GET /api/parent/overview - Get overview KPIs and child summaries for all children
+router.get('/overview', authenticateToken, requireParentOrAbove, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'User ID not found' });
+
+    const children = await db.select({
+      id: schema.students.id,
+      name: schema.students.name,
+      age: schema.students.age,
+      gradeLevel: schema.students.gradeLevel,
+    })
+    .from(schema.students)
+    .where(eq(schema.students.parentId, userId));
+
+    if (children.length === 0) {
+      return res.json({ children: [], kpis: { totalChildren: 0, sessionsThisWeek: 0, avgAccuracy: 0, totalXP: 0 } });
+    }
+
+    const childIds = children.map(c => c.id);
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    // Sessions this week
+    const sessionStats = await db.select({
+      studentId: schema.learningSessions.studentId,
+      totalSessions: sql<number>`count(*)::int`,
+      totalCorrect: sql<number>`coalesce(sum(${schema.learningSessions.correctAnswers}), 0)::int`,
+      totalAttempted: sql<number>`coalesce(sum(${schema.learningSessions.problemsAttempted}), 0)::int`,
+      lastActive: sql<string>`max(${schema.learningSessions.startTime})`,
+    })
+    .from(schema.learningSessions)
+    .where(
+      and(
+        sql`${schema.learningSessions.studentId} IN (${sql.join(childIds.map(id => sql`${id}`), sql`, `)})`,
+        gte(schema.learningSessions.startTime, oneWeekAgo)
+      )
+    )
+    .groupBy(schema.learningSessions.studentId);
+
+    // Total sessions per child (all time)
+    const allTimeSessions = await db.select({
+      studentId: schema.learningSessions.studentId,
+      totalSessions: sql<number>`count(*)::int`,
+      totalCorrect: sql<number>`coalesce(sum(${schema.learningSessions.correctAnswers}), 0)::int`,
+      totalAttempted: sql<number>`coalesce(sum(${schema.learningSessions.problemsAttempted}), 0)::int`,
+    })
+    .from(schema.learningSessions)
+    .where(sql`${schema.learningSessions.studentId} IN (${sql.join(childIds.map(id => sql`${id}`), sql`, `)})`)
+    .groupBy(schema.learningSessions.studentId);
+
+    // XP per child
+    const xpData = await db.select()
+      .from(schema.studentXP)
+      .where(sql`${schema.studentXP.studentId} IN (${sql.join(childIds.map(id => sql`${id}`), sql`, `)})`);
+
+    // Session dates per child — needed for streak calculation
+    const sessionDatesRows = await db.select({
+      studentId: schema.learningSessions.studentId,
+      sessionDate: sql<string>`date(${schema.learningSessions.startTime})::text`,
+    })
+    .from(schema.learningSessions)
+    .where(sql`${schema.learningSessions.studentId} IN (${sql.join(childIds.map(id => sql`${id}`), sql`, `)})`)
+    .groupBy(schema.learningSessions.studentId, sql`date(${schema.learningSessions.startTime})`);
+
+    // Group session dates by student
+    const sessionDatesByChild: Record<number, Set<string>> = {};
+    for (const row of sessionDatesRows) {
+      const sid = row.studentId as number;
+      if (!sessionDatesByChild[sid]) sessionDatesByChild[sid] = new Set();
+      if (row.sessionDate) sessionDatesByChild[sid].add(row.sessionDate);
+    }
+
+    // Compute consecutive-day streak backward from today for each child
+    const computeStreak = (daySet: Set<string>): number => {
+      let streak = 0;
+      const check = new Date();
+      check.setHours(0, 0, 0, 0);
+      while (daySet.has(check.toISOString().split('T')[0])) {
+        streak++;
+        check.setDate(check.getDate() - 1);
+      }
+      return streak;
+    };
+
+    // Build child summaries
+    const childSummaries = children.map(child => {
+      const stats = sessionStats.find(s => s.studentId === child.id);
+      const allStats = allTimeSessions.find(s => s.studentId === child.id);
+      const xp = xpData.find(x => x.studentId === child.id);
+      const accuracyAll = allStats && allStats.totalAttempted > 0
+        ? Math.round((allStats.totalCorrect / allStats.totalAttempted) * 100) : 0;
+      const daySet = sessionDatesByChild[child.id] || new Set<string>();
+      const lastActiveDate = daySet.size > 0
+        ? [...daySet].sort().reverse()[0]
+        : null;
+
+      return {
+        id: child.id,
+        name: child.name,
+        age: child.age,
+        gradeLevel: child.gradeLevel,
+        sessionsThisWeek: stats?.totalSessions || 0,
+        totalSessions: allStats?.totalSessions || 0,
+        accuracy: accuracyAll,
+        totalXP: xp?.totalXP || 0,
+        level: xp?.level || 1,
+        weeklyXP: xp?.weeklyXP || 0,
+        lastActive: lastActiveDate,
+        streak: computeStreak(daySet),
+      };
+    });
+
+    const totalXP = xpData.reduce((sum, x) => sum + (x.totalXP || 0), 0);
+    const totalSessionsWeek = sessionStats.reduce((sum, s) => sum + (s.totalSessions || 0), 0);
+    const allAccuracies = childSummaries.filter(c => c.totalSessions > 0).map(c => c.accuracy);
+    const avgAccuracy = allAccuracies.length > 0
+      ? Math.round(allAccuracies.reduce((s, a) => s + a, 0) / allAccuracies.length) : 0;
+
+    res.json({
+      children: childSummaries,
+      kpis: {
+        totalChildren: children.length,
+        sessionsThisWeek: totalSessionsWeek,
+        avgAccuracy,
+        totalXP,
+      }
+    });
+  } catch (error) {
+    console.error('Get parent overview error:', error);
+    res.status(500).json({ error: 'Failed to fetch overview' });
+  }
+});
+
 router.get('/dashboard-kpis', authenticateToken, requireParentOrAbove, async (req, res) => {
   try {
     const userId = req.user?.id;

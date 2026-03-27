@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { LogOut, BookOpen, LayoutDashboard } from 'lucide-react';
+import { LogOut, BookOpen, LayoutDashboard, Users } from 'lucide-react';
 import Footer from '@/components/Footer';
 import PublicHeader from '@/components/PublicHeader';
 
@@ -54,6 +54,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, onSignOut, onBackToSubj
                   <Link to="/admin">
                     <LayoutDashboard className="h-4 w-4 mr-2" />
                     Admin Dashboard
+                  </Link>
+                </Button>
+              )}
+              {user.primaryRole === 'parent' && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/parent">
+                    <Users className="h-4 w-4 mr-2" />
+                    My Dashboard
                   </Link>
                 </Button>
               )}

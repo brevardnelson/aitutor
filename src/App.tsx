@@ -15,6 +15,7 @@ import ContactUs from "./pages/ContactUs";
 import About from "./pages/About";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { TeacherDashboard } from "./components/teacher/TeacherDashboard";
+import { ParentDashboard } from "./components/parent/ParentDashboard";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,7 @@ const App = () => (
                 <Route path="/contact-us" element={<ContactUs />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/teacher" element={<TeacherDashboard />} />
+                <Route path="/parent" element={<ParentDashboard />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
