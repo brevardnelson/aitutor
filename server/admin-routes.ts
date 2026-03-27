@@ -117,7 +117,7 @@ router.get('/schools', authenticateToken, async (req: Request, res: Response) =>
       .from(schema.schools)
       .where(and(
         eq(schema.schools.isActive, true),
-        sql`${schema.schools.id} = ANY(${userSchoolIds})`
+        inArray(schema.schools.id, userSchoolIds)
       ))
       .orderBy(schema.schools.name);
     }
