@@ -165,7 +165,7 @@ export const GamificationDashboard: React.FC<GamificationDashboardProps> = ({ cl
       setError(null);
 
       // Use the single aggregate endpoint instead of N+1 API calls
-      const token = localStorage.getItem('caribbeanAI_auth_token') || localStorage.getItem('caribbeanAI_token') || '';
+      const token = localStorage.getItem('caribbeanAI_token') || localStorage.getItem('caribbeanAI_auth_token') || '';
       const response = await fetch(`/api/teacher/class/${classId}/gamification`, {
         credentials: 'include',
         headers: {
@@ -247,7 +247,7 @@ export const GamificationDashboard: React.FC<GamificationDashboardProps> = ({ cl
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_auth_token') || localStorage.getItem('caribbeanAI_token') || ''}`
+          'Authorization': `Bearer ${localStorage.getItem('caribbeanAI_token') || localStorage.getItem('caribbeanAI_auth_token') || ''}`
         },
         body: JSON.stringify({
           studentId,

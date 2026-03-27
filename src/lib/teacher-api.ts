@@ -2,10 +2,14 @@
 
 const API_BASE = '/api/teacher';
 
-// Get auth headers — prefer RBAC token, fall back to main-app token
+// Get auth headers — use the main-app JWT token (caribbeanAI_token) that the
+// JWT AuthContext trusts as the current session. Fall back to the legacy RBAC
+// token only when the main-app token is absent (e.g. direct admin-portal flows).
+// NOTE: caribbeanAI_auth_token must NOT take priority — it can hold a stale
+// session from a previous login under a different account, causing 403 errors.
 const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('caribbeanAI_auth_token')
-    || localStorage.getItem('caribbeanAI_token')
+  const token = localStorage.getItem('caribbeanAI_token')
+    || localStorage.getItem('caribbeanAI_auth_token')
     || '';
   return {
     'Content-Type': 'application/json',
