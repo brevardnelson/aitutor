@@ -386,7 +386,7 @@ export class DashboardStorage {
           
           if (dbColumn) {
             setClause.push(`${dbColumn} = $${values.length + 1}`);
-            values.push(value);
+            values.push(value instanceof Date ? value.toISOString() : value);
           }
         }
       });
@@ -411,7 +411,7 @@ export class DashboardStorage {
           ${mastery.completedProblems || 0}, ${mastery.accuracyRate || 0},
           ${mastery.averageAttempts || 0}, ${mastery.averageHints || 0},
           ${mastery.masteryLevel || 'novice'}, CURRENT_TIMESTAMP,
-          ${mastery.lastActivityDate || new Date()}, ${mastery.timeSpent || 0}
+          ${mastery.lastActivityDate instanceof Date ? mastery.lastActivityDate.toISOString() : (mastery.lastActivityDate || new Date().toISOString())}, ${mastery.timeSpent || 0}
         )
       `;
     }
@@ -461,7 +461,7 @@ export class DashboardStorage {
       accuracyRate,
       masteryLevel,
       timeSpent: totalTime,
-      lastActivityDate: new Date().toISOString(),
+      lastActivityDate: new Date(),
     });
   }
 

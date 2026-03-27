@@ -336,7 +336,11 @@ export class DashboardAPI {
 
         // Refresh topic mastery from full session history so teachers always see live data
         if (session[0].subject && session[0].topic) {
-          await storage.refreshTopicMastery(studentId, session[0].subject, session[0].topic);
+          try {
+            await storage.refreshTopicMastery(studentId, session[0].subject, session[0].topic);
+          } catch (masteryErr) {
+            console.error('Failed to refresh topic mastery (non-fatal):', masteryErr);
+          }
         }
 
         if (problemsCompleted > 0) {
